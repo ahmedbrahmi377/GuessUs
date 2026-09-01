@@ -5,8 +5,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.*;
 
 import org.json.JSONArray;
@@ -20,17 +22,16 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.util.ArrayList;
 import java.util.Random;
 
 public class MainActivity extends Activity {
 
-    // =========================
-    // SUPABASE / GAME VARIABLES
-    // =========================
+    // =========================================================
+    // GAME
+    // =========================================================
 
     private LinearLayout content;
-    private Handler handler = new Handler();
+    private final Handler handler = new Handler();
 
     private String roomCode = "";
     private String roomId = "";
@@ -46,85 +47,127 @@ public class MainActivity extends Activity {
     private boolean predictionSent = false;
 
     private Runnable syncRunnable;
+    private Runnable timerRunnable;
 
-    // =========================
-    // QUESTIONS
-    // =========================
+    private int secondsLeft = 45;
+
+    // =========================================================
+    // 50 QUESTIONS
+    // =========================================================
 
     private final String[] questions = {
 
-        "من أكثر واحد يضحك في وقت غلط؟",
+            "من أكثر واحد يضحك في وقت غلط؟",
+            "لو ربحت مليون، شنو أول حاجة تعملها؟",
+            "من أكثر واحد يتأخر على المواعيد؟",
+            "لو تسافر غدوة، وين تمشي؟",
+            "شنو أكثر شيء تحب تغيره في شخصيتك؟",
+            "من أكثر واحد يفهمك من نظرة؟",
+            "شنو أكثر حاجة تفرحك بسرعة؟",
+            "من أكثر واحد ممكن ينسى حاجة مهمة؟",
+            "من أكثر واحد يحب المغامرات؟",
+            "من أكثر واحد مستحيل تعرف شنو يفكر؟",
 
-        "لو ربحت مليون، شنو أول حاجة تعملها؟",
+            "لو عندك يوم كامل بدون مسؤوليات، شنو تعمل؟",
+            "من أكثر واحد يقدر يعيش أسبوع بدون هاتف؟",
+            "شنو أكثر موقف يضحكك كل مرة تتذكره؟",
+            "من أكثر واحد ممكن يعمل قرار فجأة؟",
+            "لو تختار قوة خارقة، شنو تختار؟",
+            "من أكثر واحد يحب الأكل؟",
+            "من أكثر واحد عنده حظ غريب؟",
+            "شنو أول شيء تشتريه لو صار عندك فلوس كثيرة؟",
+            "من أكثر واحد يقدر يحفظ سر؟",
+            "من أكثر واحد يتوتر بسرعة؟",
 
-        "من أكثر واحد يتأخر على المواعيد؟",
+            "شنو أكثر تطبيق تستعمله؟",
+            "من أكثر واحد يحب السهر؟",
+            "من أكثر واحد ممكن يضيع في مكان يعرفه؟",
+            "شنو أكثر لعبة تحبها؟",
+            "من أكثر واحد يرسل رسائل طويلة؟",
+            "من أكثر واحد يرد متأخر؟",
+            "لو تعيش في مدينة ثانية، شنو تختار؟",
+            "من أكثر واحد يحب التصوير؟",
+            "شنو أكثر شيء ما تقدر تعيش بدونه؟",
+            "من أكثر واحد عنده أفكار مجنونة؟",
 
-        "لو تسافر غدوة، وين تمشي؟",
+            "من أكثر واحد يقدر يقنع الآخرين؟",
+            "لو تقدر تتعلم مهارة فورًا، شنو تختار؟",
+            "من أكثر واحد يحب الأفلام؟",
+            "من أكثر واحد يسمع موسيقى أكثر؟",
+            "شنو أكثر شيء يخليك تضحك؟",
+            "من أكثر واحد ممكن يصبح مشهورًا؟",
+            "من أكثر واحد يحب التحديات؟",
+            "شنو أكثر مكان تحب تزوره؟",
+            "من أكثر واحد ينسى أين وضع هاتفه؟",
+            "من أكثر واحد يحب المفاجآت؟",
 
-        "شنو أكثر شيء تحب تغيره في شخصيتك؟",
-
-        "من أكثر واحد يفهمك من نظرة؟",
-
-        "شنو أكثر حاجة تفرحك بسرعة؟",
-
-        "من أكثر واحد ممكن ينسى حاجة مهمة؟",
-
-        "من أكثر واحد يحب المغامرات؟",
-
-        "من أكثر واحد مستحيل تعرف شنو يفكر؟",
-
-        "لو عندك يوم كامل بدون مسؤوليات، شنو تعمل؟",
-
-        "من أكثر واحد يقدر يعيش أسبوع بدون هاتف؟",
-
-        "شنو أكثر موقف يضحكك كل مرة تتذكره؟",
-
-        "من أكثر واحد ممكن يعمل قرار فجأة؟",
-
-        "لو تختار قوة خارقة، شنو تختار؟"
+            "لو تقدر ترجع ليوم واحد من الماضي، أي يوم تختار؟",
+            "من أكثر واحد يعطي نصائح جيدة؟",
+            "شنو أكثر شيء يزعجك؟",
+            "من أكثر واحد يغير رأيه بسرعة؟",
+            "من أكثر واحد يحب المنافسة؟",
+            "شنو الشيء الذي تتمنى تتقنه؟",
+            "من أكثر واحد يستطيع البقاء هادئًا؟",
+            "من أكثر واحد ممكن يضحك الجميع؟",
+            "شنو أفضل شيء في أصدقائك؟",
+            "من أكثر واحد يعرفك فعلًا؟"
     };
 
-    // =========================
+    // =========================================================
     // COLORS
-    // =========================
+    // =========================================================
 
     private int background() {
         return dark
-                ? Color.rgb(20, 20, 25)
-                : Color.rgb(250, 250, 250);
+                ? Color.rgb(15, 17, 24)
+                : Color.rgb(247, 248, 252);
+    }
+
+    private int cardColor() {
+        return dark
+                ? Color.rgb(27, 30, 40)
+                : Color.WHITE;
     }
 
     private int foreground() {
         return dark
                 ? Color.WHITE
-                : Color.rgb(25, 25, 25);
+                : Color.rgb(25, 27, 35);
     }
 
     private int secondary() {
         return dark
-                ? Color.rgb(190, 190, 200)
-                : Color.rgb(90, 90, 90);
+                ? Color.rgb(185, 190, 205)
+                : Color.rgb(95, 100, 115);
     }
 
-    // =========================
+    private int accent() {
+        return Color.rgb(105, 85, 220);
+    }
+
+    // =========================================================
     // ACTIVITY
-    // =========================
+    // =========================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         home();
     }
 
     @Override
     protected void onDestroy() {
+
         stopSync();
+        stopTimer();
+
         super.onDestroy();
     }
 
-    // =========================
-    // UI HELPERS
-    // =========================
+    // =========================================================
+    // UI
+    // =========================================================
 
     private TextView text(String value, int size) {
 
@@ -133,7 +176,7 @@ public class MainActivity extends Activity {
         t.setText(value);
         t.setTextSize(size);
         t.setTextColor(foreground());
-        t.setPadding(20, 16, 20, 16);
+        t.setPadding(18, 14, 18, 14);
 
         return t;
     }
@@ -153,16 +196,69 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
 
         b.setText(value);
-        b.setTextSize(17);
+        b.setTextSize(16);
         b.setAllCaps(false);
-        b.setTextColor(foreground());
+        b.setTextColor(Color.WHITE);
+
+        GradientDrawable bg = new GradientDrawable();
+
+        bg.setColor(accent());
+        bg.setCornerRadius(28);
+
+        b.setBackground(bg);
+
+        b.setPadding(10, 5, 10, 5);
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        58
+                );
+
+        params.setMargins(0, 7, 0, 7);
+
+        b.setLayoutParams(params);
 
         return b;
+    }
+
+    private EditText input(String hint) {
+
+        EditText e = new EditText(this);
+
+        e.setHint(hint);
+        e.setTextColor(foreground());
+        e.setHintTextColor(secondary());
+        e.setTextSize(17);
+        e.setPadding(20, 10, 20, 10);
+
+        GradientDrawable bg = new GradientDrawable();
+
+        bg.setColor(cardColor());
+        bg.setCornerRadius(22);
+        bg.setStroke(2, dark
+                ? Color.rgb(55, 60, 75)
+                : Color.rgb(225, 227, 235));
+
+        e.setBackground(bg);
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        62
+                );
+
+        params.setMargins(0, 8, 0, 8);
+
+        e.setLayoutParams(params);
+
+        return e;
     }
 
     private void base() {
 
         stopSync();
+        stopTimer();
 
         content = new LinearLayout(this);
 
@@ -171,7 +267,10 @@ public class MainActivity extends Activity {
         );
 
         content.setPadding(
-                18, 18, 18, 18
+                18,
+                20,
+                18,
+                25
         );
 
         content.setBackgroundColor(
@@ -181,6 +280,7 @@ public class MainActivity extends Activity {
         ScrollView scroll =
                 new ScrollView(this);
 
+        scroll.setFillViewport(true);
         scroll.addView(content);
 
         setContentView(scroll);
@@ -208,9 +308,9 @@ public class MainActivity extends Activity {
         ).show();
     }
 
-    // =========================
+    // =========================================================
     // HOME
-    // =========================
+    // =========================================================
 
     private void home() {
 
@@ -222,16 +322,32 @@ public class MainActivity extends Activity {
                 title("GuessUs 🎮")
         );
 
-        TextView sub =
+        TextView subtitle =
                 text(
-                        "أسئلة • توقعات • أصدقاء\n" +
-                        "اللعبة التي تختبر مدى معرفتك بأصحابك!",
-                        18
+                        "هل تعرف أصحابك فعلًا؟\n" +
+                        "جاوب، توقّع، واربح النقاط!",
+                        19
                 );
 
-        sub.setGravity(Gravity.CENTER);
+        subtitle.setGravity(Gravity.CENTER);
 
-        content.addView(sub);
+        content.addView(subtitle);
+
+        space();
+
+        TextView gameInfo =
+                text(
+                        "👥 حتى 6 لاعبين\n" +
+                        "🎯 Predict\n" +
+                        "💬 Chat\n" +
+                        "🏆 Leaderboard\n" +
+                        "❓ 50 سؤال",
+                        17
+                );
+
+        gameInfo.setGravity(Gravity.CENTER);
+
+        content.addView(gameInfo);
 
         space();
 
@@ -250,15 +366,17 @@ public class MainActivity extends Activity {
 
         space();
 
-        TextView info =
+        TextView version =
                 text(
-                        "حتى 6 لاعبين • أونلاين • Chat • نقاط",
-                        15
+                        "GuessUs v2.0",
+                        14
                 );
 
-        info.setGravity(Gravity.CENTER);
+        version.setGravity(Gravity.CENTER);
 
-        content.addView(info);
+        version.setTextColor(secondary());
+
+        content.addView(version);
 
         create.setOnClickListener(
                 v -> createScreen()
@@ -273,9 +391,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
-    // CREATE ROOM SCREEN
-    // =========================
+    // =========================================================
+    // CREATE
+    // =========================================================
 
     private void createScreen() {
 
@@ -288,11 +406,7 @@ public class MainActivity extends Activity {
         space();
 
         EditText name =
-                new EditText(this);
-
-        name.setHint("اكتب اسمك");
-        name.setTextColor(foreground());
-        name.setHintTextColor(secondary());
+                input("اكتب اسمك");
 
         content.addView(name);
 
@@ -302,27 +416,25 @@ public class MainActivity extends Activity {
                 button("✨ إنشاء الغرفة");
 
         Button back =
-                button("← Back");
+                button("← رجوع");
 
         content.addView(create);
         content.addView(back);
 
         create.setOnClickListener(v -> {
 
-            String nameValue =
+            String n =
                     name.getText()
                             .toString()
                             .trim();
 
-            if (nameValue.isEmpty()) {
+            if (n.isEmpty()) {
 
                 toast("اكتب اسمك أولًا");
-
                 return;
             }
 
-            playerName =
-                    nameValue;
+            playerName = n;
 
             createRoom();
         });
@@ -332,9 +444,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
+    // =========================================================
     // CREATE ROOM
-    // =========================
+    // =========================================================
 
     private void createRoom() {
 
@@ -346,28 +458,27 @@ public class MainActivity extends Activity {
 
                 String code;
 
-                // Generate a unique 4-digit room code
                 while (true) {
 
                     code =
                             String.valueOf(
                                     1000 +
-                                    new Random()
-                                            .nextInt(9000)
+                                            new Random()
+                                                    .nextInt(9000)
                             );
 
-                    String checkUrl =
+                    String check =
                             BuildConfig.SUPABASE_URL +
-                            "/rest/v1/rooms" +
-                            "?code=eq." +
-                            code +
-                            "&select=id";
+                                    "/rest/v1/rooms" +
+                                    "?code=eq." +
+                                    code +
+                                    "&select=id";
 
                     JSONArray existing =
                             new JSONArray(
                                     request(
                                             "GET",
-                                            checkUrl,
+                                            check,
                                             null,
                                             false
                                     )
@@ -381,21 +492,14 @@ public class MainActivity extends Activity {
                 JSONObject room =
                         new JSONObject();
 
-                room.put(
-                        "code",
-                        code
-                );
-
-                room.put(
-                        "status",
-                        "waiting"
-                );
+                room.put("code", code);
+                room.put("status", "waiting");
 
                 String response =
                         request(
                                 "POST",
                                 BuildConfig.SUPABASE_URL +
-                                "/rest/v1/rooms",
+                                        "/rest/v1/rooms",
                                 room.toString(),
                                 true
                         );
@@ -406,7 +510,7 @@ public class MainActivity extends Activity {
                 if (result.length() == 0) {
 
                     throw new Exception(
-                            "Supabase لم يرجع الغرفة"
+                            "لم يتم إنشاء الغرفة"
                     );
                 }
 
@@ -421,7 +525,6 @@ public class MainActivity extends Activity {
 
                 isHost = true;
 
-                // Create game state
                 JSONObject state =
                         new JSONObject();
 
@@ -443,12 +546,11 @@ public class MainActivity extends Activity {
                 request(
                         "POST",
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/game_state",
+                                "/rest/v1/game_state",
                         state.toString(),
                         false
                 );
 
-                // Add host as player
                 addPlayer();
 
                 runOnUiThread(
@@ -460,7 +562,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(
                         () -> toast(
                                 "فشل إنشاء الغرفة:\n" +
-                                e.getMessage()
+                                        e.getMessage()
                         )
                 );
             }
@@ -468,9 +570,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // JOIN SCREEN
-    // =========================
+    // =========================================================
+    // JOIN
+    // =========================================================
 
     private void joinScreen() {
 
@@ -483,18 +585,14 @@ public class MainActivity extends Activity {
         space();
 
         EditText name =
-                new EditText(this);
-
-        name.setHint("اكتب اسمك");
-
-        content.addView(name);
+                input("اكتب اسمك");
 
         EditText code =
-                new EditText(this);
+                input("كود الغرفة - 4 أرقام");
 
-        code.setHint("كود الغرفة - 4 أرقام");
         code.setInputType(2);
 
+        content.addView(name);
         content.addView(code);
 
         space();
@@ -503,7 +601,7 @@ public class MainActivity extends Activity {
                 button("🚪 دخول الغرفة");
 
         Button back =
-                button("← Back");
+                button("← رجوع");
 
         content.addView(join);
         content.addView(back);
@@ -523,16 +621,12 @@ public class MainActivity extends Activity {
             if (n.isEmpty()) {
 
                 toast("اكتب اسمك");
-
                 return;
             }
 
             if (c.length() != 4) {
 
-                toast(
-                        "الكود لازم يكون 4 أرقام"
-                );
-
+                toast("الكود لازم يكون 4 أرقام");
                 return;
             }
 
@@ -547,9 +641,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
+    // =========================================================
     // JOIN ROOM
-    // =========================
+    // =========================================================
 
     private void joinRoom() {
 
@@ -561,13 +655,13 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/rooms" +
-                        "?code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=id,code,status";
+                                "/rest/v1/rooms" +
+                                "?code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=id,code,status";
 
                 JSONArray rooms =
                         new JSONArray(
@@ -605,16 +699,15 @@ public class MainActivity extends Activity {
                     );
                 }
 
-                // Count players
                 String playersUrl =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=id";
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=id";
 
                 JSONArray players =
                         new JSONArray(
@@ -646,7 +739,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(
                         () -> toast(
                                 "تعذر الدخول:\n" +
-                                e.getMessage()
+                                        e.getMessage()
                         )
                 );
             }
@@ -654,9 +747,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // ADD PLAYER
-    // =========================
+    // =========================================================
+    // PLAYER
+    // =========================================================
 
     private void addPlayer()
             throws Exception {
@@ -682,8 +775,8 @@ public class MainActivity extends Activity {
         player.put(
                 "player_id",
                 playerName +
-                "_" +
-                System.currentTimeMillis()
+                        "_" +
+                        System.currentTimeMillis()
         );
 
         player.put(
@@ -704,26 +797,33 @@ public class MainActivity extends Activity {
         request(
                 "POST",
                 BuildConfig.SUPABASE_URL +
-                "/rest/v1/players",
+                        "/rest/v1/players",
                 player.toString(),
                 false
         );
     }
 
-    // =========================
+    // =========================================================
     // LOBBY
-    // =========================
+    // =========================================================
 
     private void lobby() {
 
         base();
 
         content.addView(
-                title(
-                        "🎮 غرفة " +
-                        roomCode
-                )
+                title("🎮 غرفة " + roomCode)
         );
+
+        TextView hint =
+                text(
+                        "شارك الكود مع أصحابك 👥",
+                        17
+                );
+
+        hint.setGravity(Gravity.CENTER);
+
+        content.addView(hint);
 
         space();
 
@@ -733,20 +833,18 @@ public class MainActivity extends Activity {
                         18
                 );
 
-        content.addView(
-                playersView
-        );
+        content.addView(playersView);
 
         space();
 
         Button ready =
-                button("🟢 Ready");
+                button("🟢 أنا Ready");
 
         Button start =
                 button(
                         isHost
-                        ? "🚀 Start Game"
-                        : "⏳ بانتظار الـHost"
+                                ? "🚀 Start Game"
+                                : "⏳ بانتظار الـHost"
                 );
 
         Button chat =
@@ -762,7 +860,6 @@ public class MainActivity extends Activity {
 
         loadPlayers(playersView);
 
-        // Refresh lobby every 2 seconds
         startSync(
                 () -> {
 
@@ -799,13 +896,11 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
+    // =========================================================
     // LOAD PLAYERS
-    // =========================
+    // =========================================================
 
-    private void loadPlayers(
-            TextView view
-    ) {
+    private void loadPlayers(TextView view) {
 
         new Thread(() -> {
 
@@ -813,14 +908,14 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=name,score,ready,is_host" +
-                        "&order=joined_at.asc";
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=name,score,ready,is_host" +
+                                "&order=joined_at.asc";
 
                 JSONArray players =
                         new JSONArray(
@@ -832,20 +927,18 @@ public class MainActivity extends Activity {
                                 )
                         );
 
-                StringBuilder text =
+                StringBuilder result =
                         new StringBuilder();
 
-                text.append(
+                result.append(
                         "👥 Players "
                 );
 
-                text.append(
+                result.append(
                         players.length()
                 );
 
-                text.append(
-                        "/6\n\n"
-                );
+                result.append("/6\n\n");
 
                 for (
                         int i = 0;
@@ -856,42 +949,36 @@ public class MainActivity extends Activity {
                     JSONObject p =
                             players.getJSONObject(i);
 
-                    text.append(
+                    result.append(
                             i + 1
                     );
 
-                    text.append(". ");
+                    result.append(". ");
 
-                    text.append(
-                            p.optString(
-                                    "name"
-                            )
+                    result.append(
+                            p.optString("name")
                     );
 
                     if (
-                            p.optBoolean(
-                                    "is_host"
-                            )
+                            p.optBoolean("is_host")
                     ) {
-                        text.append(" 👑");
+                        result.append(" 👑");
                     }
 
                     if (
-                            p.optBoolean(
-                                    "ready"
-                            )
+                            p.optBoolean("ready")
                     ) {
-                        text.append(" 🟢");
+                        result.append(" 🟢");
                     } else {
-                        text.append(" ⚪");
+                        result.append(" ⚪");
                     }
 
-                    text.append("\n");
+                    result.append("\n");
                 }
 
                 runOnUiThread(
                         () -> view.setText(
-                                text.toString()
+                                result.toString()
                         )
                 );
 
@@ -907,9 +994,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // READY
-    // =========================
+    // =========================================================
 
     private void setReady() {
 
@@ -919,17 +1006,17 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&name=eq." +
-                        URLEncoder.encode(
-                                playerName,
-                                "UTF-8"
-                        );
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&name=eq." +
+                                URLEncoder.encode(
+                                        playerName,
+                                        "UTF-8"
+                                );
 
                 JSONObject data =
                         new JSONObject();
@@ -964,9 +1051,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // START GAME
-    // =========================
+    // =========================================================
 
     private void startGame() {
 
@@ -974,30 +1061,30 @@ public class MainActivity extends Activity {
 
             try {
 
-                String playersUrl =
+                String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=name,ready";
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=name,ready";
 
                 JSONArray players =
                         new JSONArray(
                                 request(
                                         "GET",
-                                        playersUrl,
+                                        url,
                                         null,
                                         false
                                 )
                         );
 
-                if (players.length() < 1) {
+                if (players.length() < 2) {
 
                     throw new Exception(
-                            "لا يوجد لاعبون"
+                            "تحتاج لاعبين على الأقل"
                     );
                 }
 
@@ -1010,9 +1097,7 @@ public class MainActivity extends Activity {
                     if (
                             !players
                                     .getJSONObject(i)
-                                    .optBoolean(
-                                            "ready"
-                                    )
+                                    .optBoolean("ready")
                     ) {
 
                         throw new Exception(
@@ -1021,7 +1106,6 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // Change room status
                 JSONObject roomData =
                         new JSONObject();
 
@@ -1032,12 +1116,12 @@ public class MainActivity extends Activity {
 
                 String roomUrl =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/rooms" +
-                        "?code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        );
+                                "/rest/v1/rooms" +
+                                "?code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                );
 
                 request(
                         "PATCH",
@@ -1046,14 +1130,13 @@ public class MainActivity extends Activity {
                         false
                 );
 
-                // Update game state
+                round = 0;
+                questionIndex = 0;
+
                 updateGameState(
                         0,
                         "answering"
                 );
-
-                round = 0;
-                questionIndex = 0;
 
                 runOnUiThread(
                         () -> answerScreen()
@@ -1071,13 +1154,14 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // ANSWER SCREEN
-    // =========================
+    // =========================================================
+    // ANSWER
+    // =========================================================
 
     private void answerScreen() {
 
         stopSync();
+        stopTimer();
 
         answerSent = false;
 
@@ -1086,71 +1170,85 @@ public class MainActivity extends Activity {
         content.addView(
                 title(
                         "❓ الجولة " +
-                        (round + 1)
+                                (round + 1)
                 )
         );
+
+        TextView progress =
+                text(
+                        "السؤال " +
+                                (questionIndex + 1) +
+                                " / " +
+                                questions.length,
+                        16
+                );
+
+        progress.setGravity(Gravity.CENTER);
+
+        progress.setTextColor(secondary());
+
+        content.addView(progress);
+
+        TextView timer =
+                text(
+                        "⏱️ 45",
+                        22
+                );
+
+        timer.setGravity(Gravity.CENTER);
+
+        timer.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        content.addView(timer);
+
+        space();
 
         TextView question =
                 text(
                         questions[
                                 questionIndex %
-                                questions.length
-                        ],
+                                        questions.length
+                                ],
                         24
                 );
 
-        question.setGravity(
-                Gravity.CENTER
-        );
+        question.setGravity(Gravity.CENTER);
 
         question.setTypeface(
                 null,
                 Typeface.BOLD
         );
 
-        content.addView(
-                question
-        );
+        content.addView(question);
 
         space();
 
-        content.addView(
+        TextView help =
                 text(
-                        "اكتب إجابتك، وبعدها سنحاول معرفة من يعرفك أكثر 🎯",
+                        "اكتب إجابتك بصراحة 😄\n" +
+                                "بعدها حاول توقع إجابات أصحابك.",
                         17
-                )
-        );
+                );
+
+        help.setGravity(Gravity.CENTER);
+
+        content.addView(help);
 
         EditText answer =
-                new EditText(this);
+                input("اكتب إجابتك هنا...");
 
-        answer.setHint(
-                "اكتب إجابتك هنا..."
-        );
-
-        answer.setTextColor(
-                foreground()
-        );
-
-        answer.setHintTextColor(
-                secondary()
-        );
-
-        answer.setMinLines(2);
+        answer.setMinLines(3);
 
         content.addView(answer);
 
-        space();
-
         Button send =
-                button(
-                        "✓ إرسال الإجابة"
-                );
+                button("✓ إرسال الإجابة");
 
         Button chat =
-                button(
-                        "💬 Chat"
-                );
+                button("💬 Chat");
 
         content.addView(send);
         content.addView(chat);
@@ -1159,10 +1257,7 @@ public class MainActivity extends Activity {
 
             if (answerSent) {
 
-                toast(
-                        "أرسلت إجابتك بالفعل"
-                );
-
+                toast("أرسلت إجابتك بالفعل");
                 return;
             }
 
@@ -1173,10 +1268,7 @@ public class MainActivity extends Activity {
 
             if (value.isEmpty()) {
 
-                toast(
-                        "اكتب إجابة أولًا"
-                );
-
+                toast("اكتب إجابة أولًا");
                 return;
             }
 
@@ -1186,15 +1278,82 @@ public class MainActivity extends Activity {
         chat.setOnClickListener(
                 v -> chat()
         );
+
+        startTimer(
+                timer,
+                send,
+                45
+        );
     }
 
-    // =========================
-    // SEND ANSWER
-    // =========================
+    // =========================================================
+    // TIMER
+    // =========================================================
 
-    private void sendAnswer(
-            String answer
+    private void startTimer(
+            TextView timer,
+            Button send,
+            int seconds
     ) {
+
+        secondsLeft = seconds;
+
+        timerRunnable =
+                new Runnable() {
+
+                    @Override
+                    public void run() {
+
+                        if (secondsLeft <= 0) {
+
+                            if (!answerSent) {
+
+                                answerSent = true;
+
+                                sendAnswer(
+                                        "لا توجد إجابة"
+                                );
+                            }
+
+                            return;
+                        }
+
+                        timer.setText(
+                                "⏱️ " +
+                                        secondsLeft
+                        );
+
+                        secondsLeft--;
+
+                        handler.postDelayed(
+                                this,
+                                1000
+                        );
+                    }
+                };
+
+        handler.post(timerRunnable);
+    }
+
+    private void stopTimer() {
+
+        if (timerRunnable != null) {
+
+            handler.removeCallbacks(
+                    timerRunnable
+            );
+
+            timerRunnable = null;
+        }
+    }
+
+    // =========================================================
+    // SEND ANSWER
+    // =========================================================
+
+    private void sendAnswer(String answer) {
+
+        stopTimer();
 
         answerSent = true;
 
@@ -1202,26 +1361,25 @@ public class MainActivity extends Activity {
 
             try {
 
-                // Remove previous answer
-                String deleteUrl =
+                String delete =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/round_answers" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&round=eq." +
-                        round +
-                        "&player_name=eq." +
-                        URLEncoder.encode(
-                                playerName,
-                                "UTF-8"
-                        );
+                                "/rest/v1/round_answers" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&round=eq." +
+                                round +
+                                "&player_name=eq." +
+                                URLEncoder.encode(
+                                        playerName,
+                                        "UTF-8"
+                                );
 
                 request(
                         "DELETE",
-                        deleteUrl,
+                        delete,
                         null,
                         false
                 );
@@ -1252,7 +1410,7 @@ public class MainActivity extends Activity {
                 request(
                         "POST",
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/round_answers",
+                                "/rest/v1/round_answers",
                         data.toString(),
                         false
                 );
@@ -1268,7 +1426,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(
                         () -> toast(
                                 "فشل إرسال الإجابة:\n" +
-                                e.getMessage()
+                                        e.getMessage()
                         )
                 );
             }
@@ -1276,26 +1434,27 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // WAIT FOR ANSWERS
-    // =========================
+    // =========================================================
+    // WAITING
+    // =========================================================
 
     private void waitingForAnswers() {
 
         base();
 
         content.addView(
-                title(
-                        "⏳ تم إرسال إجابتك!"
-                )
+                title("✅ تم إرسال إجابتك")
         );
 
-        content.addView(
+        TextView wait =
                 text(
                         "ننتظر بقية اللاعبين...",
-                        19
-                )
-        );
+                        20
+                );
+
+        wait.setGravity(Gravity.CENTER);
+
+        content.addView(wait);
 
         TextView count =
                 text(
@@ -1303,11 +1462,23 @@ public class MainActivity extends Activity {
                         24
                 );
 
-        count.setGravity(
-                Gravity.CENTER
+        count.setGravity(Gravity.CENTER);
+
+        count.setTypeface(
+                null,
+                Typeface.BOLD
         );
 
         content.addView(count);
+
+        space();
+
+        content.addView(
+                text(
+                        "🎯 بعد الإجابات ستنتقلون إلى مرحلة Predict.",
+                        17
+                )
+        );
 
         Button chat =
                 button("💬 Chat");
@@ -1323,13 +1494,11 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
+    // =========================================================
     // CHECK ANSWERS
-    // =========================
+    // =========================================================
 
-    private void checkAnswers(
-            TextView counter
-    ) {
+    private void checkAnswers(TextView counter) {
 
         new Thread(() -> {
 
@@ -1337,13 +1506,13 @@ public class MainActivity extends Activity {
 
                 String playersUrl =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=name";
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=name";
 
                 JSONArray players =
                         new JSONArray(
@@ -1357,15 +1526,15 @@ public class MainActivity extends Activity {
 
                 String answersUrl =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/round_answers" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&round=eq." +
-                        round +
-                        "&select=player_name";
+                                "/rest/v1/round_answers" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&round=eq." +
+                                round +
+                                "&select=player_name";
 
                 JSONArray answers =
                         new JSONArray(
@@ -1386,15 +1555,15 @@ public class MainActivity extends Activity {
                 runOnUiThread(
                         () -> counter.setText(
                                 submitted +
-                                " / " +
-                                total +
-                                " لاعبين أجابوا"
+                                        " / " +
+                                        total +
+                                        " لاعبين أجابوا"
                         )
                 );
 
                 if (
                         total > 0 &&
-                        submitted >= total
+                                submitted >= total
                 ) {
 
                     updateGameState(
@@ -1413,30 +1582,35 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // PREDICTION SCREEN
-    // =========================
+    // =========================================================
+    // PREDICT
+    // =========================================================
 
     private void predictionScreen() {
 
         stopSync();
+        stopTimer();
 
         predictionSent = false;
 
         base();
 
         content.addView(
-                title(
-                        "🎯 توقع إجابة صاحبك"
-                )
+                title("🎯 Predict")
         );
 
-        content.addView(
+        TextView info =
                 text(
-                        "اختار لاعبًا واكتب الإجابة التي تعتقد أنه كتبها.",
+                        "حاول تعرف إجابة صاحبك!\n\n" +
+                                "✅ توقع صحيح = +3\n" +
+                                "✨ إذا طابقت الإجابة بالضبط = +2 Bonus\n" +
+                                "🏆 المجموع الممكن = +5",
                         18
-                )
-        );
+                );
+
+        info.setGravity(Gravity.CENTER);
+
+        content.addView(info);
 
         space();
 
@@ -1455,19 +1629,9 @@ public class MainActivity extends Activity {
         content.addView(spinner);
 
         EditText prediction =
-                new EditText(this);
-
-        prediction.setHint(
-                "شنو تتوقع أنه كتب؟"
-        );
-
-        prediction.setTextColor(
-                foreground()
-        );
-
-        prediction.setHintTextColor(
-                secondary()
-        );
+                input(
+                        "شنو تتوقع أنه كتب؟"
+                );
 
         prediction.setMinLines(2);
 
@@ -1476,19 +1640,13 @@ public class MainActivity extends Activity {
         space();
 
         Button predict =
-                button(
-                        "🎯 Predict"
-                );
+                button("🎯 Predict");
 
         Button skip =
-                button(
-                        "⏭ Skip"
-                );
+                button("⏭ Skip");
 
         Button chat =
-                button(
-                        "💬 Chat"
-                );
+                button("💬 Chat");
 
         content.addView(predict);
         content.addView(skip);
@@ -1511,14 +1669,10 @@ public class MainActivity extends Activity {
             }
 
             if (
-                    spinner.getSelectedItem()
-                    == null
+                    spinner.getSelectedItem() == null
             ) {
 
-                toast(
-                        "اختار لاعبًا"
-                );
-
+                toast("اختار لاعبًا");
                 return;
             }
 
@@ -1535,10 +1689,7 @@ public class MainActivity extends Activity {
 
             if (predicted.isEmpty()) {
 
-                toast(
-                        "اكتب توقعك"
-                );
-
+                toast("اكتب توقعك");
                 return;
             }
 
@@ -1557,9 +1708,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
-    // LOAD TARGET PLAYERS
-    // =========================
+    // =========================================================
+    // LOAD TARGETS
+    // =========================================================
 
     private void loadPredictionPlayers(
             Spinner spinner,
@@ -1572,13 +1723,13 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=name";
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=name";
 
                 JSONArray players =
                         new JSONArray(
@@ -1609,16 +1760,16 @@ public class MainActivity extends Activity {
                             )
                     ) {
 
-                        adapter.add(name);
+                        final String finalName =
+                                name;
+
+                        runOnUiThread(
+                                () -> adapter.add(
+                                        finalName
+                                )
+                        );
                     }
                 }
-
-                runOnUiThread(
-                        () -> spinner
-                                .setAdapter(
-                                        adapter
-                                )
-                );
 
             } catch (Exception ignored) {
             }
@@ -1626,9 +1777,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // SUBMIT PREDICTION
-    // =========================
+    // =========================================================
 
     private void submitPrediction(
             String target,
@@ -1643,20 +1794,20 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/round_answers" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&round=eq." +
-                        round +
-                        "&player_name=eq." +
-                        URLEncoder.encode(
-                                target,
-                                "UTF-8"
-                        ) +
-                        "&select=answer";
+                                "/rest/v1/round_answers" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&round=eq." +
+                                round +
+                                "&player_name=eq." +
+                                URLEncoder.encode(
+                                        target,
+                                        "UTF-8"
+                                ) +
+                                "&select=answer";
 
                 JSONArray answers =
                         new JSONArray(
@@ -1682,17 +1833,28 @@ public class MainActivity extends Activity {
                                         "answer"
                                 );
 
-                boolean correct =
-                        actual
-                                .trim()
+                boolean exact =
+                        actual.trim()
                                 .equalsIgnoreCase(
                                         predicted.trim()
                                 );
 
-                int points =
-                        correct
-                        ? 5
-                        : 0;
+                boolean correct =
+                        exact ||
+                                similarAnswer(
+                                        actual,
+                                        predicted
+                                );
+
+                int points = 0;
+
+                if (correct) {
+                    points += 3;
+                }
+
+                if (exact) {
+                    points += 2;
+                }
 
                 JSONObject prediction =
                         new JSONObject();
@@ -1735,17 +1897,14 @@ public class MainActivity extends Activity {
                 request(
                         "POST",
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/predictions",
+                                "/rest/v1/predictions",
                         prediction.toString(),
                         false
                 );
 
-                if (correct) {
+                score += points;
 
-                    score += 5;
-
-                    updateScore();
-                }
+                updateScore();
 
                 final int earned =
                         points;
@@ -1753,12 +1912,16 @@ public class MainActivity extends Activity {
                 final boolean right =
                         correct;
 
+                final boolean bonus =
+                        exact;
+
                 runOnUiThread(
                         () -> predictionResult(
                                 target,
                                 predicted,
                                 actual,
                                 right,
+                                bonus,
                                 earned
                         )
                 );
@@ -1770,7 +1933,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(
                         () -> toast(
                                 "تعذر التوقع:\n" +
-                                e.getMessage()
+                                        e.getMessage()
                         )
                 );
             }
@@ -1778,15 +1941,52 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // PREDICTION RESULT
-    // =========================
+    // =========================================================
+    // SIMPLE ANSWER MATCH
+    // =========================================================
+
+    private boolean similarAnswer(
+            String a,
+            String b
+    ) {
+
+        String x =
+                normalize(a);
+
+        String y =
+                normalize(b);
+
+        if (x.isEmpty() || y.isEmpty()) {
+            return false;
+        }
+
+        return x.equals(y)
+                || x.contains(y)
+                || y.contains(x);
+    }
+
+    private String normalize(String value) {
+
+        return value
+                .toLowerCase()
+                .replace(" ", "")
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ة", "ه")
+                .trim();
+    }
+
+    // =========================================================
+    // RESULT
+    // =========================================================
 
     private void predictionResult(
             String target,
             String predicted,
             String actual,
             boolean correct,
+            boolean exact,
             int points
     ) {
 
@@ -1795,58 +1995,92 @@ public class MainActivity extends Activity {
         content.addView(
                 title(
                         correct
-                        ? "🎉 توقع صحيح!"
-                        : "❌ توقع خاطئ"
+                                ? "🎉 ممتاز!"
+                                : "❌ ليس هذه المرة"
                 )
         );
 
-        content.addView(
-                text(
-                        "👤 اللاعب: " +
-                        target +
-                        "\n\n" +
-                        "🎯 توقعك: " +
-                        predicted +
-                        "\n\n" +
-                        "💬 إجابته: " +
-                        actual +
-                        "\n\n" +
-                        "⭐ النقاط: +" +
-                        points +
-                        "\n" +
-                        "🏆 مجموعك: " +
-                        score,
-                        20
-                )
+        StringBuilder result =
+                new StringBuilder();
+
+        result.append(
+                "👤 اللاعب: "
         );
+
+        result.append(target);
+
+        result.append("\n\n🎯 توقعك: ");
+
+        result.append(predicted);
+
+        result.append("\n\n💬 إجابته: ");
+
+        result.append(actual);
+
+        result.append("\n\n");
 
         if (correct) {
 
-            content.addView(
-                    text(
-                            "🔥 +3 نقاط للتوقع الصحيح\n" +
-                            "✨ +2 Bonus للمطابقة\n" +
-                            "💥 المجموع +5!",
-                            18
-                    )
+            result.append(
+                    "✅ توقعت إجابته!\n"
+            );
+
+            result.append(
+                    "⭐ +3 نقاط"
+            );
+
+            if (exact) {
+
+                result.append(
+                        "\n✨ +2 Bonus للمطابقة الدقيقة"
+                );
+            }
+        } else {
+
+            result.append(
+                    "😅 حاول مرة أخرى في الجولة القادمة"
             );
         }
 
-        Button next =
-                button(
-                        "➡ Next Question"
+        result.append(
+                "\n\n🏆 مجموعك: "
+        );
+
+        result.append(score);
+
+        TextView resultView =
+                text(
+                        result.toString(),
+                        19
                 );
+
+        resultView.setGravity(
+                Gravity.CENTER
+        );
+
+        content.addView(resultView);
+
+        space();
+
+        Button next =
+                button("➡ السؤال التالي");
+
+        Button leaderboard =
+                button("🏆 الترتيب");
 
         Button chat =
-                button(
-                        "💬 Chat"
-                );
+                button("💬 Chat");
 
         content.addView(next);
+        content.addView(leaderboard);
         content.addView(chat);
 
         next.setOnClickListener(
                 v -> nextRound()
+        );
+
+        leaderboard.setOnClickListener(
+                v -> leaderboard()
         );
 
         chat.setOnClickListener(
@@ -1854,9 +2088,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
-    // UPDATE SCORE
-    // =========================
+    // =========================================================
+    // SCORE
+    // =========================================================
 
     private void updateScore() {
 
@@ -1866,17 +2100,17 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&name=eq." +
-                        URLEncoder.encode(
-                                playerName,
-                                "UTF-8"
-                        );
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&name=eq." +
+                                URLEncoder.encode(
+                                        playerName,
+                                        "UTF-8"
+                                );
 
                 JSONObject data =
                         new JSONObject();
@@ -1899,23 +2133,21 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // NEXT ROUND
-    // =========================
+    // =========================================================
 
     private void nextRound() {
 
         round++;
-
         questionIndex++;
 
         if (
                 questionIndex >=
-                questions.length
+                        questions.length
         ) {
 
             leaderboard();
-
             return;
         }
 
@@ -1930,18 +2162,16 @@ public class MainActivity extends Activity {
         answerScreen();
     }
 
-    // =========================
+    // =========================================================
     // LEADERBOARD
-    // =========================
+    // =========================================================
 
     private void leaderboard() {
 
         base();
 
         content.addView(
-                title(
-                        "🏆 النتائج النهائية"
-                )
+                title("🏆 Leaderboard")
         );
 
         TextView board =
@@ -1950,19 +2180,21 @@ public class MainActivity extends Activity {
                         20
                 );
 
+        board.setGravity(
+                Gravity.CENTER
+        );
+
         content.addView(board);
 
         loadLeaderboard(board);
 
+        space();
+
         Button again =
-                button(
-                        "🔄 Play Again"
-                );
+                button("🔄 Play Again");
 
         Button room =
-                button(
-                        "🏠 Back to Room"
-                );
+                button("🏠 Back to Room");
 
         content.addView(again);
         content.addView(room);
@@ -1977,6 +2209,7 @@ public class MainActivity extends Activity {
                     resetScores();
 
                     if (isHost) {
+
                         updateGameState(
                                 0,
                                 "answering"
@@ -1992,9 +2225,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
+    // =========================================================
     // LOAD LEADERBOARD
-    // =========================
+    // =========================================================
 
     private void loadLeaderboard(
             TextView board
@@ -2006,14 +2239,14 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=name,score" +
-                        "&order=score.desc";
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=name,score" +
+                                "&order=score.desc";
 
                 JSONArray players =
                         new JSONArray(
@@ -2035,21 +2268,28 @@ public class MainActivity extends Activity {
                 ) {
 
                     JSONObject p =
-                            players
-                                    .getJSONObject(i);
+                            players.getJSONObject(i);
+
+                    String medal;
+
+                    if (i == 0) {
+                        medal = "🥇";
+                    } else if (i == 1) {
+                        medal = "🥈";
+                    } else if (i == 2) {
+                        medal = "🥉";
+                    } else {
+                        medal = "🏅";
+                    }
 
                     result.append(
-                            i + 1
+                            medal
                     );
 
-                    result.append(
-                            ". "
-                    );
+                    result.append(" ");
 
                     result.append(
-                            p.optString(
-                                    "name"
-                            )
+                            p.optString("name")
                     );
 
                     result.append(
@@ -2057,13 +2297,11 @@ public class MainActivity extends Activity {
                     );
 
                     result.append(
-                            p.optInt(
-                                    "score"
-                            )
+                            p.optInt("score")
                     );
 
                     result.append(
-                            " نقطة\n"
+                            " نقطة\n\n"
                     );
                 }
 
@@ -2085,9 +2323,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // RESET SCORES
-    // =========================
+    // =========================================================
+    // RESET
+    // =========================================================
 
     private void resetScores() {
 
@@ -2097,12 +2335,12 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        );
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                );
 
                 JSONObject data =
                         new JSONObject();
@@ -2124,17 +2362,15 @@ public class MainActivity extends Activity {
                         false
                 );
 
-                score = 0;
-
             } catch (Exception ignored) {
             }
 
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // CHAT
-    // =========================
+    // =========================================================
 
     private void chat() {
 
@@ -2153,27 +2389,15 @@ public class MainActivity extends Activity {
         content.addView(messages);
 
         EditText input =
-                new EditText(this);
-
-        input.setHint(
-                "اكتب رسالة..."
-        );
-
-        input.setTextColor(
-                foreground()
-        );
-
-        input.setHintTextColor(
-                secondary()
-        );
+                input("اكتب رسالة...");
 
         content.addView(input);
 
         Button send =
-                button("📨 Send");
+                button("📨 إرسال");
 
         Button back =
-                button("← Back");
+                button("← رجوع");
 
         content.addView(send);
         content.addView(back);
@@ -2205,9 +2429,9 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
+    // =========================================================
     // SEND MESSAGE
-    // =========================
+    // =========================================================
 
     private void sendMessage(
             String message
@@ -2238,7 +2462,7 @@ public class MainActivity extends Activity {
                 request(
                         "POST",
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/messages",
+                                "/rest/v1/messages",
                         data.toString(),
                         false
                 );
@@ -2249,9 +2473,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
-    // LOAD MESSAGES
-    // =========================
+    // =========================================================
+    // LOAD CHAT
+    // =========================================================
 
     private void loadMessages(
             TextView view
@@ -2263,14 +2487,14 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/messages" +
-                        "?room_id=eq." +
-                        URLEncoder.encode(
-                                roomId,
-                                "UTF-8"
-                        ) +
-                        "&select=player_name,message,created_at" +
-                        "&order=created_at.asc";
+                                "/rest/v1/messages" +
+                                "?room_id=eq." +
+                                URLEncoder.encode(
+                                        roomId,
+                                        "UTF-8"
+                                ) +
+                                "&select=player_name,message,created_at" +
+                                "&order=created_at.asc";
 
                 JSONArray messages =
                         new JSONArray(
@@ -2302,9 +2526,7 @@ public class MainActivity extends Activity {
                             messages
                                     .getJSONObject(i);
 
-                    output.append(
-                            "👤 "
-                    );
+                    output.append("👤 ");
 
                     output.append(
                             m.optString(
@@ -2312,9 +2534,7 @@ public class MainActivity extends Activity {
                             )
                     );
 
-                    output.append(
-                            "\n"
-                    );
+                    output.append("\n");
 
                     output.append(
                             m.optString(
@@ -2345,9 +2565,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // SETTINGS
-    // =========================
+    // =========================================================
 
     private void settings() {
 
@@ -2370,6 +2590,8 @@ public class MainActivity extends Activity {
                 foreground()
         );
 
+        darkSwitch.setTextSize(18);
+
         darkSwitch.setChecked(
                 dark
         );
@@ -2382,21 +2604,17 @@ public class MainActivity extends Activity {
 
         content.addView(
                 text(
-                        "🌐 Language\n" +
-                        "العربية • Français • English",
+                        "🎮 GuessUs v2.0\n\n" +
+                                "👥 Multiplayer\n" +
+                                "🎯 Prediction\n" +
+                                "💬 Chat\n" +
+                                "🏆 Leaderboard\n" +
+                                "❓ 50 Questions",
                         17
                 )
         );
 
         space();
-
-        content.addView(
-                text(
-                        "🎮 GuessUs\n" +
-                        "Online party game",
-                        15
-                )
-        );
 
         Button back =
                 button("← Back");
@@ -2417,13 +2635,14 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =========================
-    // LEAVE ROOM
-    // =========================
+    // =========================================================
+    // LEAVE
+    // =========================================================
 
     private void leaveRoom() {
 
         stopSync();
+        stopTimer();
 
         new Thread(() -> {
 
@@ -2431,17 +2650,17 @@ public class MainActivity extends Activity {
 
                 String url =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&name=eq." +
-                        URLEncoder.encode(
-                                playerName,
-                                "UTF-8"
-                        );
+                                "/rest/v1/players" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&name=eq." +
+                                URLEncoder.encode(
+                                        playerName,
+                                        "UTF-8"
+                                );
 
                 request(
                         "DELETE",
@@ -2458,9 +2677,12 @@ public class MainActivity extends Activity {
                 roomCode = "";
                 roomId = "";
                 playerName = "";
+
                 score = 0;
                 round = 0;
                 questionIndex = 0;
+
+                isHost = false;
 
                 home();
             });
@@ -2468,9 +2690,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // GAME STATE
-    // =========================
+    // =========================================================
 
     private void updateGameState(
             int index,
@@ -2483,13 +2705,13 @@ public class MainActivity extends Activity {
 
                 String find =
                         BuildConfig.SUPABASE_URL +
-                        "/rest/v1/game_state" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=room_code";
+                                "/rest/v1/game_state" +
+                                "?room_code=eq." +
+                                URLEncoder.encode(
+                                        roomCode,
+                                        "UTF-8"
+                                ) +
+                                "&select=room_code";
 
                 JSONArray rows =
                         new JSONArray(
@@ -2519,12 +2741,12 @@ public class MainActivity extends Activity {
                     request(
                             "PATCH",
                             BuildConfig.SUPABASE_URL +
-                            "/rest/v1/game_state" +
-                            "?room_code=eq." +
-                            URLEncoder.encode(
-                                    roomCode,
-                                    "UTF-8"
-                            ),
+                                    "/rest/v1/game_state" +
+                                    "?room_code=eq." +
+                                    URLEncoder.encode(
+                                            roomCode,
+                                            "UTF-8"
+                                    ),
                             data.toString(),
                             false
                     );
@@ -2539,7 +2761,7 @@ public class MainActivity extends Activity {
                     request(
                             "POST",
                             BuildConfig.SUPABASE_URL +
-                            "/rest/v1/game_state",
+                                    "/rest/v1/game_state",
                             data.toString(),
                             false
                     );
@@ -2551,9 +2773,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // =========================
+    // =========================================================
     // SYNC
-    // =========================
+    // =========================================================
 
     private void startSync(
             Runnable action
@@ -2576,9 +2798,7 @@ public class MainActivity extends Activity {
                     }
                 };
 
-        handler.post(
-                syncRunnable
-        );
+        handler.post(syncRunnable);
     }
 
     private void stopSync() {
@@ -2593,9 +2813,9 @@ public class MainActivity extends Activity {
         }
     }
 
-    // =========================
-    // SUPABASE HTTP
-    // =========================
+    // =========================================================
+    // HTTP / SUPABASE
+    // =========================================================
 
     private String request(
             String method,
@@ -2631,7 +2851,7 @@ public class MainActivity extends Activity {
         connection.setRequestProperty(
                 "Authorization",
                 "Bearer " +
-                BuildConfig.SUPABASE_KEY
+                        BuildConfig.SUPABASE_KEY
         );
 
         connection.setRequestProperty(
@@ -2647,8 +2867,8 @@ public class MainActivity extends Activity {
         connection.setRequestProperty(
                 "Prefer",
                 returnRepresentation
-                ? "return=representation"
-                : "return=minimal"
+                        ? "return=representation"
+                        : "return=minimal"
         );
 
         if (body != null) {
@@ -2673,7 +2893,7 @@ public class MainActivity extends Activity {
 
         if (
                 code >= 200 &&
-                code < 400
+                        code < 400
         ) {
 
             stream =
@@ -2705,8 +2925,7 @@ public class MainActivity extends Activity {
         String line;
 
         while (
-                (line =
-                        reader.readLine())
+                (line = reader.readLine())
                         != null
         ) {
 
@@ -2719,17 +2938,17 @@ public class MainActivity extends Activity {
 
         if (
                 code < 200 ||
-                code >= 300
+                        code >= 300
         ) {
 
             throw new IOException(
                     "HTTP " +
-                    code +
-                    ": " +
-                    result
+                            code +
+                            ": " +
+                            result
             );
         }
 
         return result.toString();
     }
-}
+    }
