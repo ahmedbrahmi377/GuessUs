@@ -4,43 +4,111 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.*;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Random;
 
 public class MainActivity extends Activity {
 
-    LinearLayout content;
-    Handler handler = new Handler();
+    // =========================
+    // SUPABASE / GAME VARIABLES
+    // =========================
 
-    String roomCode = "";
-    String roomId = "";
-    String playerName = "";
-    int score = 0;
-    int round = 0;
+    private LinearLayout content;
+    private Handler handler = new Handler();
 
-    boolean dark = false;
+    private String roomCode = "";
+    private String roomId = "";
+    private String playerName = "";
 
-    final String[] questions = {
+    private int score = 0;
+    private int round = 0;
+    private int questionIndex = 0;
+
+    private boolean dark = false;
+    private boolean isHost = false;
+    private boolean answerSent = false;
+    private boolean predictionSent = false;
+
+    private Runnable syncRunnable;
+
+    // =========================
+    // QUESTIONS
+    // =========================
+
+    private final String[] questions = {
+
         "من أكثر واحد يضحك في وقت غلط؟",
+
         "لو ربحت مليون، شنو أول حاجة تعملها؟",
+
         "من أكثر واحد يتأخر على المواعيد؟",
+
         "لو تسافر غدوة، وين تمشي؟",
-        "شنو أكثر عادة تحب تغيرها؟",
+
+        "شنو أكثر شيء تحب تغيره في شخصيتك؟",
+
         "من أكثر واحد يفهمك من نظرة؟",
-        "شنو أكثر شيء يفرحك بسرعة؟",
+
+        "شنو أكثر حاجة تفرحك بسرعة؟",
+
         "من أكثر واحد ممكن ينسى حاجة مهمة؟",
+
         "من أكثر واحد يحب المغامرات؟",
-        "من أكثر واحد عنده أسرار؟"
+
+        "من أكثر واحد مستحيل تعرف شنو يفكر؟",
+
+        "لو عندك يوم كامل بدون مسؤوليات، شنو تعمل؟",
+
+        "من أكثر واحد يقدر يعيش أسبوع بدون هاتف؟",
+
+        "شنو أكثر موقف يضحكك كل مرة تتذكره؟",
+
+        "من أكثر واحد ممكن يعمل قرار فجأة؟",
+
+        "لو تختار قوة خارقة، شنو تختار؟"
     };
+
+    // =========================
+    // COLORS
+    // =========================
+
+    private int background() {
+        return dark
+                ? Color.rgb(20, 20, 25)
+                : Color.rgb(250, 250, 250);
+    }
+
+    private int foreground() {
+        return dark
+                ? Color.WHITE
+                : Color.rgb(25, 25, 25);
+    }
+
+    private int secondary() {
+        return dark
+                ? Color.rgb(190, 190, 200)
+                : Color.rgb(90, 90, 90);
+    }
+
+    // =========================
+    // ACTIVITY
+    // =========================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,203 +116,394 @@ public class MainActivity extends Activity {
         home();
     }
 
-    TextView text(String s, int size) {
+    @Override
+    protected void onDestroy() {
+        stopSync();
+        super.onDestroy();
+    }
+
+    // =========================
+    // UI HELPERS
+    // =========================
+
+    private TextView text(String value, int size) {
+
         TextView t = new TextView(this);
-        t.setText(s);
+
+        t.setText(value);
         t.setTextSize(size);
-        t.setPadding(20, 18, 20, 18);
+        t.setTextColor(foreground());
+        t.setPadding(20, 16, 20, 16);
+
         return t;
     }
 
-    Button button(String s) {
+    private TextView title(String value) {
+
+        TextView t = text(value, 30);
+
+        t.setGravity(Gravity.CENTER);
+        t.setTypeface(null, Typeface.BOLD);
+
+        return t;
+    }
+
+    private Button button(String value) {
+
         Button b = new Button(this);
-        b.setText(s);
+
+        b.setText(value);
+        b.setTextSize(17);
         b.setAllCaps(false);
+        b.setTextColor(foreground());
+
         return b;
     }
 
-    void base() {
-        content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(18, 20, 18, 20);
+    private void base() {
 
-        content.setBackgroundColor(
-            dark ? Color.rgb(25,25,30) : Color.WHITE
+        stopSync();
+
+        content = new LinearLayout(this);
+
+        content.setOrientation(
+                LinearLayout.VERTICAL
         );
 
-        ScrollView scroll = new ScrollView(this);
+        content.setPadding(
+                18, 18, 18, 18
+        );
+
+        content.setBackgroundColor(
+                background()
+        );
+
+        ScrollView scroll =
+                new ScrollView(this);
+
         scroll.addView(content);
+
         setContentView(scroll);
     }
 
-    void home() {
+    private void space() {
+
+        Space s = new Space(this);
+
+        content.addView(
+                s,
+                new LinearLayout.LayoutParams(
+                        1,
+                        12
+                )
+        );
+    }
+
+    private void toast(String message) {
+
+        Toast.makeText(
+                this,
+                message,
+                Toast.LENGTH_SHORT
+        ).show();
+    }
+
+    // =========================
+    // HOME
+    // =========================
+
+    private void home() {
+
         base();
 
-        TextView title = text("GuessUs 🎮", 32);
-        title.setGravity(Gravity.CENTER);
-        content.addView(title);
+        space();
 
-        TextView subtitle =
-            text("أسئلة • توقعات • أصدقاء\nلعب أونلاين", 18);
-        subtitle.setGravity(Gravity.CENTER);
-        content.addView(subtitle);
+        content.addView(
+                title("GuessUs 🎮")
+        );
 
-        Button create = button("🏠 Create Room");
-        Button join = button("🔑 Join Room");
-        Button settings = button("⚙ Settings");
+        TextView sub =
+                text(
+                        "أسئلة • توقعات • أصدقاء\n" +
+                        "اللعبة التي تختبر مدى معرفتك بأصحابك!",
+                        18
+                );
+
+        sub.setGravity(Gravity.CENTER);
+
+        content.addView(sub);
+
+        space();
+
+        Button create =
+                button("🏠  Create Room");
+
+        Button join =
+                button("🔑  Join Room");
+
+        Button settings =
+                button("⚙️  Settings");
 
         content.addView(create);
         content.addView(join);
         content.addView(settings);
 
-        create.setOnClickListener(v -> createScreen());
-        join.setOnClickListener(v -> joinScreen());
-        settings.setOnClickListener(v -> settings());
+        space();
+
+        TextView info =
+                text(
+                        "حتى 6 لاعبين • أونلاين • Chat • نقاط",
+                        15
+                );
+
+        info.setGravity(Gravity.CENTER);
+
+        content.addView(info);
+
+        create.setOnClickListener(
+                v -> createScreen()
+        );
+
+        join.setOnClickListener(
+                v -> joinScreen()
+        );
+
+        settings.setOnClickListener(
+                v -> settings()
+        );
     }
 
-    void createScreen() {
+    // =========================
+    // CREATE ROOM SCREEN
+    // =========================
+
+    private void createScreen() {
+
         base();
 
-        content.addView(text("🏠 Create Room", 28));
+        content.addView(
+                title("🏠 Create Room")
+        );
 
-        EditText name = new EditText(this);
-        name.setHint("اسمك");
+        space();
+
+        EditText name =
+                new EditText(this);
+
+        name.setHint("اكتب اسمك");
+        name.setTextColor(foreground());
+        name.setHintTextColor(secondary());
+
         content.addView(name);
 
-        Button create = button("Create Room");
-        Button back = button("← Back");
+        space();
+
+        Button create =
+                button("✨ إنشاء الغرفة");
+
+        Button back =
+                button("← Back");
 
         content.addView(create);
         content.addView(back);
 
         create.setOnClickListener(v -> {
-            String n = name.getText().toString().trim();
 
-            if (n.isEmpty()) {
-                Toast.makeText(
-                    this,
-                    "اكتب اسمك",
-                    Toast.LENGTH_SHORT
-                ).show();
+            String nameValue =
+                    name.getText()
+                            .toString()
+                            .trim();
+
+            if (nameValue.isEmpty()) {
+
+                toast("اكتب اسمك أولًا");
+
                 return;
             }
 
-            playerName = n;
+            playerName =
+                    nameValue;
+
             createRoom();
         });
 
-        back.setOnClickListener(v -> home());
+        back.setOnClickListener(
+                v -> home()
+        );
     }
 
-    void createRoom() {
+    // =========================
+    // CREATE ROOM
+    // =========================
 
-        final String code =
-            String.valueOf(
-                1000 + new Random().nextInt(9000)
-            );
+    private void createRoom() {
+
+        toast("جاري إنشاء الغرفة...");
 
         new Thread(() -> {
+
             try {
 
-                String check =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/rooms?code=eq." +
-                    code +
-                    "&select=id,code";
+                String code;
 
-                JSONArray found =
-                    new JSONArray(
-                        request("GET", check, null)
-                    );
+                // Generate a unique 4-digit room code
+                while (true) {
 
-                if (found.length() > 0) {
-                    createRoom();
-                    return;
+                    code =
+                            String.valueOf(
+                                    1000 +
+                                    new Random()
+                                            .nextInt(9000)
+                            );
+
+                    String checkUrl =
+                            BuildConfig.SUPABASE_URL +
+                            "/rest/v1/rooms" +
+                            "?code=eq." +
+                            code +
+                            "&select=id";
+
+                    JSONArray existing =
+                            new JSONArray(
+                                    request(
+                                            "GET",
+                                            checkUrl,
+                                            null,
+                                            false
+                                    )
+                            );
+
+                    if (existing.length() == 0) {
+                        break;
+                    }
                 }
 
                 JSONObject room =
-                    new JSONObject();
+                        new JSONObject();
 
-                room.put("code", code);
-                room.put("status", "waiting");
+                room.put(
+                        "code",
+                        code
+                );
+
+                room.put(
+                        "status",
+                        "waiting"
+                );
 
                 String response =
-                    request(
-                        "POST",
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/rooms",
-                        room.toString(),
-                        true
-                    );
+                        request(
+                                "POST",
+                                BuildConfig.SUPABASE_URL +
+                                "/rest/v1/rooms",
+                                room.toString(),
+                                true
+                        );
 
-                JSONArray created =
-                    new JSONArray(response);
+                JSONArray result =
+                        new JSONArray(response);
 
-                if (created.length() == 0) {
+                if (result.length() == 0) {
+
                     throw new Exception(
-                        "لم يتم إنشاء الغرفة"
+                            "Supabase لم يرجع الغرفة"
                     );
                 }
 
-                JSONObject r =
-                    created.getJSONObject(0);
+                JSONObject created =
+                        result.getJSONObject(0);
 
-                roomId = r.getString("id");
-                roomCode = code;
+                roomId =
+                        created.getString("id");
 
+                roomCode =
+                        created.getString("code");
+
+                isHost = true;
+
+                // Create game state
                 JSONObject state =
-                    new JSONObject();
+                        new JSONObject();
 
-                state.put("room_code", code);
-                state.put("question_index", 0);
-                state.put("status", "waiting");
+                state.put(
+                        "room_code",
+                        roomCode
+                );
+
+                state.put(
+                        "question_index",
+                        0
+                );
+
+                state.put(
+                        "status",
+                        "waiting"
+                );
 
                 request(
-                    "POST",
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/game_state",
-                    state.toString()
+                        "POST",
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/game_state",
+                        state.toString(),
+                        false
                 );
 
-                addPlayer(
-                    roomId,
-                    roomCode,
-                    playerName,
-                    true
-                );
+                // Add host as player
+                addPlayer();
 
-                runOnUiThread(() -> lobby());
+                runOnUiThread(
+                        () -> lobby()
+                );
 
             } catch (Exception e) {
 
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        "HTTP Error:\n" + e.getMessage(),
-                        Toast.LENGTH_LONG
-                    ).show()
+                runOnUiThread(
+                        () -> toast(
+                                "فشل إنشاء الغرفة:\n" +
+                                e.getMessage()
+                        )
                 );
             }
+
         }).start();
     }
 
-    void joinScreen() {
+    // =========================
+    // JOIN SCREEN
+    // =========================
+
+    private void joinScreen() {
+
         base();
 
-        content.addView(text("🔑 Join Room", 28));
+        content.addView(
+                title("🔑 Join Room")
+        );
 
-        EditText name = new EditText(this);
-        name.setHint("اسمك");
+        space();
 
-        EditText code = new EditText(this);
-        code.setHint("كود الغرفة");
-        code.setInputType(2);
+        EditText name =
+                new EditText(this);
+
+        name.setHint("اكتب اسمك");
 
         content.addView(name);
+
+        EditText code =
+                new EditText(this);
+
+        code.setHint("كود الغرفة - 4 أرقام");
+        code.setInputType(2);
+
         content.addView(code);
 
-        Button join = button("Join Room");
-        Button back = button("← Back");
+        space();
+
+        Button join =
+                button("🚪 دخول الغرفة");
+
+        Button back =
+                button("← Back");
 
         content.addView(join);
         content.addView(back);
@@ -252,916 +511,1685 @@ public class MainActivity extends Activity {
         join.setOnClickListener(v -> {
 
             String n =
-                name.getText().toString().trim();
+                    name.getText()
+                            .toString()
+                            .trim();
 
             String c =
-                code.getText().toString().trim();
+                    code.getText()
+                            .toString()
+                            .trim();
 
-            if (n.isEmpty() || c.length() != 4) {
-                Toast.makeText(
-                    this,
-                    "أدخل الاسم وكود من 4 أرقام",
-                    Toast.LENGTH_SHORT
-                ).show();
+            if (n.isEmpty()) {
+
+                toast("اكتب اسمك");
+
+                return;
+            }
+
+            if (c.length() != 4) {
+
+                toast(
+                        "الكود لازم يكون 4 أرقام"
+                );
+
                 return;
             }
 
             playerName = n;
             roomCode = c;
 
-            findRoom();
+            joinRoom();
         });
 
-        back.setOnClickListener(v -> home());
+        back.setOnClickListener(
+                v -> home()
+        );
     }
 
-    void findRoom() {
+    // =========================
+    // JOIN ROOM
+    // =========================
+
+    private void joinRoom() {
+
+        toast("جاري البحث عن الغرفة...");
 
         new Thread(() -> {
+
             try {
 
                 String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/rooms?code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&select=id,code,status";
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/rooms" +
+                        "?code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=id,code,status";
 
-                JSONArray arr =
-                    new JSONArray(
-                        request("GET", url, null)
-                    );
+                JSONArray rooms =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        url,
+                                        null,
+                                        false
+                                )
+                        );
 
-                if (arr.length() == 0) {
+                if (rooms.length() == 0) {
+
                     throw new Exception(
-                        "الغرفة غير موجودة"
+                            "الغرفة غير موجودة"
                     );
                 }
 
                 JSONObject room =
-                    arr.getJSONObject(0);
+                        rooms.getJSONObject(0);
 
                 roomId =
-                    room.getString("id");
+                        room.getString("id");
 
                 String status =
-                    room.optString(
-                        "status",
-                        "waiting"
-                    );
+                        room.optString(
+                                "status",
+                                "waiting"
+                        );
 
                 if (status.equals("playing")) {
+
                     throw new Exception(
-                        "اللعبة بدأت بالفعل"
+                            "اللعبة بدأت بالفعل"
                     );
                 }
 
-                addPlayer(
-                    roomId,
-                    roomCode,
-                    playerName,
-                    false
-                );
+                // Count players
+                String playersUrl =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=id";
 
-                runOnUiThread(() -> lobby());
+                JSONArray players =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        playersUrl,
+                                        null,
+                                        false
+                                )
+                        );
+
+                if (players.length() >= 6) {
+
+                    throw new Exception(
+                            "الغرفة ممتلئة"
+                    );
+                }
+
+                isHost = false;
+
+                addPlayer();
+
+                runOnUiThread(
+                        () -> lobby()
+                );
 
             } catch (Exception e) {
 
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        e.getMessage(),
-                        Toast.LENGTH_LONG
-                    ).show()
+                runOnUiThread(
+                        () -> toast(
+                                "تعذر الدخول:\n" +
+                                e.getMessage()
+                        )
                 );
             }
+
         }).start();
     }
 
-    void addPlayer(
-        String id,
-        String code,
-        String name,
-        boolean host
-    ) throws Exception {
+    // =========================
+    // ADD PLAYER
+    // =========================
 
-        JSONObject p =
-            new JSONObject();
+    private void addPlayer()
+            throws Exception {
 
-        p.put("room_id", id);
-        p.put("name", name);
-        p.put("is_host", host);
-        p.put("player_id", name + "_" + System.currentTimeMillis());
-        p.put("room_code", code);
-        p.put("score", 0);
-        p.put("ready", false);
+        JSONObject player =
+                new JSONObject();
+
+        player.put(
+                "room_id",
+                roomId
+        );
+
+        player.put(
+                "name",
+                playerName
+        );
+
+        player.put(
+                "is_host",
+                isHost
+        );
+
+        player.put(
+                "player_id",
+                playerName +
+                "_" +
+                System.currentTimeMillis()
+        );
+
+        player.put(
+                "room_code",
+                roomCode
+        );
+
+        player.put(
+                "score",
+                0
+        );
+
+        player.put(
+                "ready",
+                false
+        );
 
         request(
-            "POST",
-            BuildConfig.SUPABASE_URL +
-            "/rest/v1/players",
-            p.toString()
+                "POST",
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/players",
+                player.toString(),
+                false
         );
     }
 
-    void lobby() {
+    // =========================
+    // LOBBY
+    // =========================
+
+    private void lobby() {
 
         base();
 
-        TextView title =
-            text(
-                "🎮 Room: " + roomCode,
-                28
-            );
+        content.addView(
+                title(
+                        "🎮 غرفة " +
+                        roomCode
+                )
+        );
 
-        title.setGravity(Gravity.CENTER);
-        content.addView(title);
+        space();
 
-        TextView players =
-            text(
-                "جاري تحميل اللاعبين...",
-                19
-            );
+        TextView playersView =
+                text(
+                        "جاري تحميل اللاعبين...",
+                        18
+                );
 
-        content.addView(players);
+        content.addView(
+                playersView
+        );
+
+        space();
 
         Button ready =
-            button("🟢 Ready");
+                button("🟢 Ready");
 
         Button start =
-            button("🚀 Start Game");
+                button(
+                        isHost
+                        ? "🚀 Start Game"
+                        : "⏳ بانتظار الـHost"
+                );
 
         Button chat =
-            button("💬 Chat");
+                button("💬 Chat");
 
         Button leave =
-            button("← Leave");
+                button("🚪 Leave Room");
 
         content.addView(ready);
         content.addView(start);
         content.addView(chat);
         content.addView(leave);
 
-        loadPlayers(players);
+        loadPlayers(playersView);
 
-        ready.setOnClickListener(v ->
-            setReady()
-        );
+        // Refresh lobby every 2 seconds
+        startSync(
+                () -> {
 
-        start.setOnClickListener(v ->
-            startGame()
-        );
-
-        chat.setOnClickListener(v ->
-            chat()
-        );
-
-        leave.setOnClickListener(v -> {
-            roomCode = "";
-            roomId = "";
-            home();
-        });
-    }
-
-    void loadPlayers(TextView view) {
-
-        new Thread(() -> {
-            try {
-
-                String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/players" +
-                    "?room_code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&select=name,score,ready,is_host";
-
-                JSONArray arr =
-                    new JSONArray(
-                        request("GET", url, null)
-                    );
-
-                StringBuilder out =
-                    new StringBuilder();
-
-                out.append(
-                    "👥 Players "
-                ).append(
-                    arr.length()
-                ).append(
-                    "/6\n\n"
-                );
-
-                for (int i = 0;
-                     i < arr.length();
-                     i++) {
-
-                    JSONObject p =
-                        arr.getJSONObject(i);
-
-                    out.append("• ")
-                        .append(
-                            p.optString("name")
-                        );
-
-                    if (p.optBoolean("is_host")) {
-                        out.append(" 👑");
+                    if (!isFinishing()) {
+                        loadPlayers(playersView);
                     }
-
-                    if (p.optBoolean("ready")) {
-                        out.append(" ✓");
-                    }
-
-                    out.append("\n");
                 }
-
-                runOnUiThread(() ->
-                    view.setText(out.toString())
-                );
-
-            } catch (Exception e) {
-
-                runOnUiThread(() ->
-                    view.setText(
-                        "تعذر تحميل اللاعبين"
-                    )
-                );
-            }
-        }).start();
-    }
-
-    void setReady() {
-
-        new Thread(() -> {
-            try {
-
-                String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/players" +
-                    "?room_code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&name=eq." +
-                    URLEncoder.encode(
-                        playerName,
-                        "UTF-8"
-                    );
-
-                JSONObject data =
-                    new JSONObject();
-
-                data.put("ready", true);
-
-                request(
-                    "PATCH",
-                    url,
-                    data.toString()
-                );
-
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        "Ready ✓",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                );
-
-            } catch (Exception e) {
-
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        "فشل Ready",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                );
-            }
-        }).start();
-    }
-
-    void startGame() {
-
-        new Thread(() -> {
-            try {
-
-                JSONObject data =
-                    new JSONObject();
-
-                data.put(
-                    "status",
-                    "playing"
-                );
-
-                String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/rooms" +
-                    "?code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    );
-
-                request(
-                    "PATCH",
-                    url,
-                    data.toString()
-                );
-
-                round = 0;
-                score = 0;
-
-                runOnUiThread(() ->
-                    answerScreen()
-                );
-
-            } catch (Exception e) {
-
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        "تعذر بدء اللعبة",
-                        Toast.LENGTH_LONG
-                    ).show()
-                );
-            }
-        }).start();
-    }
-
-    void answerScreen() {
-
-        base();
-
-        content.addView(
-            text(
-                "❓ الجولة " + (round + 1),
-                27
-            )
         );
 
-        TextView q =
-            text(
-                questions[
-                    round % questions.length
-                ],
-                23
-            );
-
-        q.setGravity(Gravity.CENTER);
-        content.addView(q);
-
-        content.addView(
-            text(
-                "اكتب إجابتك بكلماتك:",
-                18
-            )
+        ready.setOnClickListener(
+                v -> setReady()
         );
 
-        EditText answer =
-            new EditText(this);
+        start.setOnClickListener(v -> {
 
-        answer.setHint(
-            "إجابتك..."
-        );
+            if (!isHost) {
 
-        content.addView(answer);
+                toast(
+                        "فقط صاحب الغرفة يستطيع البدء"
+                );
 
-        Button submit =
-            button("✓ إرسال الإجابة");
-
-        Button chat =
-            button("💬 Chat");
-
-        content.addView(submit);
-        content.addView(chat);
-
-        submit.setOnClickListener(v -> {
-
-            String a =
-                answer.getText()
-                    .toString()
-                    .trim();
-
-            if (a.isEmpty()) {
-                Toast.makeText(
-                    this,
-                    "اكتب إجابتك",
-                    Toast.LENGTH_SHORT
-                ).show();
                 return;
             }
 
-            submitAnswer(a);
+            startGame();
         });
 
-        chat.setOnClickListener(v ->
-            chat()
+        chat.setOnClickListener(
+                v -> chat()
+        );
+
+        leave.setOnClickListener(
+                v -> leaveRoom()
         );
     }
 
-    void submitAnswer(String answer) {
+    // =========================
+    // LOAD PLAYERS
+    // =========================
+
+    private void loadPlayers(
+            TextView view
+    ) {
 
         new Thread(() -> {
+
             try {
 
-                JSONObject data =
-                    new JSONObject();
+                String url =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=name,score,ready,is_host" +
+                        "&order=joined_at.asc";
 
-                data.put(
-                    "room_code",
-                    roomCode
+                JSONArray players =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        url,
+                                        null,
+                                        false
+                                )
+                        );
+
+                StringBuilder text =
+                        new StringBuilder();
+
+                text.append(
+                        "👥 Players "
                 );
 
-                data.put(
-                    "round",
-                    round
+                text.append(
+                        players.length()
                 );
 
-                data.put(
-                    "player_name",
-                    playerName
+                text.append(
+                        "/6\n\n"
                 );
 
-                data.put(
-                    "answer",
-                    answer
-                );
+                for (
+                        int i = 0;
+                        i < players.length();
+                        i++
+                ) {
 
-                request(
-                    "POST",
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/round_answers",
-                    data.toString()
-                );
+                    JSONObject p =
+                            players.getJSONObject(i);
 
-                runOnUiThread(() ->
-                    predictionScreen()
+                    text.append(
+                            i + 1
+                    );
+
+                    text.append(". ");
+
+                    text.append(
+                            p.optString(
+                                    "name"
+                            )
+                    );
+
+                    if (
+                            p.optBoolean(
+                                    "is_host"
+                            )
+                    ) {
+                        text.append(" 👑");
+                    }
+
+                    if (
+                            p.optBoolean(
+                                    "ready"
+                            )
+                    ) {
+                        text.append(" 🟢");
+                    } else {
+                        text.append(" ⚪");
+                    }
+
+                    text.append("\n");
+                }
+
+                runOnUiThread(
+                        () -> view.setText(
+                                text.toString()
+                        )
                 );
 
             } catch (Exception e) {
 
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        "تعذر إرسال الإجابة:\n" +
-                        e.getMessage(),
-                        Toast.LENGTH_LONG
-                    ).show()
+                runOnUiThread(
+                        () -> view.setText(
+                                "تعذر تحميل اللاعبين"
+                        )
                 );
             }
+
         }).start();
     }
 
-    void predictionScreen() {
+    // =========================
+    // READY
+    // =========================
+
+    private void setReady() {
+
+        new Thread(() -> {
+
+            try {
+
+                String url =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&name=eq." +
+                        URLEncoder.encode(
+                                playerName,
+                                "UTF-8"
+                        );
+
+                JSONObject data =
+                        new JSONObject();
+
+                data.put(
+                        "ready",
+                        true
+                );
+
+                request(
+                        "PATCH",
+                        url,
+                        data.toString(),
+                        false
+                );
+
+                runOnUiThread(
+                        () -> toast(
+                                "🟢 أنت Ready!"
+                        )
+                );
+
+            } catch (Exception e) {
+
+                runOnUiThread(
+                        () -> toast(
+                                "فشل Ready"
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // START GAME
+    // =========================
+
+    private void startGame() {
+
+        new Thread(() -> {
+
+            try {
+
+                String playersUrl =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=name,ready";
+
+                JSONArray players =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        playersUrl,
+                                        null,
+                                        false
+                                )
+                        );
+
+                if (players.length() < 1) {
+
+                    throw new Exception(
+                            "لا يوجد لاعبون"
+                    );
+                }
+
+                for (
+                        int i = 0;
+                        i < players.length();
+                        i++
+                ) {
+
+                    if (
+                            !players
+                                    .getJSONObject(i)
+                                    .optBoolean(
+                                            "ready"
+                                    )
+                    ) {
+
+                        throw new Exception(
+                                "ليس كل اللاعبين Ready"
+                        );
+                    }
+                }
+
+                // Change room status
+                JSONObject roomData =
+                        new JSONObject();
+
+                roomData.put(
+                        "status",
+                        "playing"
+                );
+
+                String roomUrl =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/rooms" +
+                        "?code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        );
+
+                request(
+                        "PATCH",
+                        roomUrl,
+                        roomData.toString(),
+                        false
+                );
+
+                // Update game state
+                updateGameState(
+                        0,
+                        "answering"
+                );
+
+                round = 0;
+                questionIndex = 0;
+
+                runOnUiThread(
+                        () -> answerScreen()
+                );
+
+            } catch (Exception e) {
+
+                runOnUiThread(
+                        () -> toast(
+                                e.getMessage()
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // ANSWER SCREEN
+    // =========================
+
+    private void answerScreen() {
+
+        stopSync();
+
+        answerSent = false;
 
         base();
 
         content.addView(
-            text(
-                "🎯 توقّع إجابة صاحبك",
-                27
-            )
+                title(
+                        "❓ الجولة " +
+                        (round + 1)
+                )
+        );
+
+        TextView question =
+                text(
+                        questions[
+                                questionIndex %
+                                questions.length
+                        ],
+                        24
+                );
+
+        question.setGravity(
+                Gravity.CENTER
+        );
+
+        question.setTypeface(
+                null,
+                Typeface.BOLD
         );
 
         content.addView(
-            text(
-                "اختار لاعبًا واكتب الإجابة التي تتوقع أنه كتبها.",
-                18
-            )
+                question
         );
 
-        Spinner players =
-            new Spinner(this);
+        space();
+
+        content.addView(
+                text(
+                        "اكتب إجابتك، وبعدها سنحاول معرفة من يعرفك أكثر 🎯",
+                        17
+                )
+        );
+
+        EditText answer =
+                new EditText(this);
+
+        answer.setHint(
+                "اكتب إجابتك هنا..."
+        );
+
+        answer.setTextColor(
+                foreground()
+        );
+
+        answer.setHintTextColor(
+                secondary()
+        );
+
+        answer.setMinLines(2);
+
+        content.addView(answer);
+
+        space();
+
+        Button send =
+                button(
+                        "✓ إرسال الإجابة"
+                );
+
+        Button chat =
+                button(
+                        "💬 Chat"
+                );
+
+        content.addView(send);
+        content.addView(chat);
+
+        send.setOnClickListener(v -> {
+
+            if (answerSent) {
+
+                toast(
+                        "أرسلت إجابتك بالفعل"
+                );
+
+                return;
+            }
+
+            String value =
+                    answer.getText()
+                            .toString()
+                            .trim();
+
+            if (value.isEmpty()) {
+
+                toast(
+                        "اكتب إجابة أولًا"
+                );
+
+                return;
+            }
+
+            sendAnswer(value);
+        });
+
+        chat.setOnClickListener(
+                v -> chat()
+        );
+    }
+
+    // =========================
+    // SEND ANSWER
+    // =========================
+
+    private void sendAnswer(
+            String answer
+    ) {
+
+        answerSent = true;
+
+        new Thread(() -> {
+
+            try {
+
+                // Remove previous answer
+                String deleteUrl =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/round_answers" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&round=eq." +
+                        round +
+                        "&player_name=eq." +
+                        URLEncoder.encode(
+                                playerName,
+                                "UTF-8"
+                        );
+
+                request(
+                        "DELETE",
+                        deleteUrl,
+                        null,
+                        false
+                );
+
+                JSONObject data =
+                        new JSONObject();
+
+                data.put(
+                        "room_code",
+                        roomCode
+                );
+
+                data.put(
+                        "round",
+                        round
+                );
+
+                data.put(
+                        "player_name",
+                        playerName
+                );
+
+                data.put(
+                        "answer",
+                        answer
+                );
+
+                request(
+                        "POST",
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/round_answers",
+                        data.toString(),
+                        false
+                );
+
+                runOnUiThread(
+                        () -> waitingForAnswers()
+                );
+
+            } catch (Exception e) {
+
+                answerSent = false;
+
+                runOnUiThread(
+                        () -> toast(
+                                "فشل إرسال الإجابة:\n" +
+                                e.getMessage()
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // WAIT FOR ANSWERS
+    // =========================
+
+    private void waitingForAnswers() {
+
+        base();
+
+        content.addView(
+                title(
+                        "⏳ تم إرسال إجابتك!"
+                )
+        );
+
+        content.addView(
+                text(
+                        "ننتظر بقية اللاعبين...",
+                        19
+                )
+        );
+
+        TextView count =
+                text(
+                        "0 / 0",
+                        24
+                );
+
+        count.setGravity(
+                Gravity.CENTER
+        );
+
+        content.addView(count);
+
+        Button chat =
+                button("💬 Chat");
+
+        content.addView(chat);
+
+        chat.setOnClickListener(
+                v -> chat()
+        );
+
+        startSync(
+                () -> checkAnswers(count)
+        );
+    }
+
+    // =========================
+    // CHECK ANSWERS
+    // =========================
+
+    private void checkAnswers(
+            TextView counter
+    ) {
+
+        new Thread(() -> {
+
+            try {
+
+                String playersUrl =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=name";
+
+                JSONArray players =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        playersUrl,
+                                        null,
+                                        false
+                                )
+                        );
+
+                String answersUrl =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/round_answers" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&round=eq." +
+                        round +
+                        "&select=player_name";
+
+                JSONArray answers =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        answersUrl,
+                                        null,
+                                        false
+                                )
+                        );
+
+                int total =
+                        players.length();
+
+                int submitted =
+                        answers.length();
+
+                runOnUiThread(
+                        () -> counter.setText(
+                                submitted +
+                                " / " +
+                                total +
+                                " لاعبين أجابوا"
+                        )
+                );
+
+                if (
+                        total > 0 &&
+                        submitted >= total
+                ) {
+
+                    updateGameState(
+                            questionIndex,
+                            "predicting"
+                    );
+
+                    runOnUiThread(
+                            () -> predictionScreen()
+                    );
+                }
+
+            } catch (Exception ignored) {
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // PREDICTION SCREEN
+    // =========================
+
+    private void predictionScreen() {
+
+        stopSync();
+
+        predictionSent = false;
+
+        base();
+
+        content.addView(
+                title(
+                        "🎯 توقع إجابة صاحبك"
+                )
+        );
+
+        content.addView(
+                text(
+                        "اختار لاعبًا واكتب الإجابة التي تعتقد أنه كتبها.",
+                        18
+                )
+        );
+
+        space();
+
+        Spinner spinner =
+                new Spinner(this);
 
         ArrayAdapter<String> adapter =
-            new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_spinner_dropdown_item
-            );
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout
+                                .simple_spinner_dropdown_item
+                );
 
-        content.addView(players);
+        spinner.setAdapter(adapter);
 
-        loadPredictionPlayers(
-            players,
-            adapter
-        );
+        content.addView(spinner);
 
         EditText prediction =
-            new EditText(this);
+                new EditText(this);
 
         prediction.setHint(
-            "شنو تتوقع إجابته؟"
+                "شنو تتوقع أنه كتب؟"
         );
+
+        prediction.setTextColor(
+                foreground()
+        );
+
+        prediction.setHintTextColor(
+                secondary()
+        );
+
+        prediction.setMinLines(2);
 
         content.addView(prediction);
 
+        space();
+
         Button predict =
-            button("🎯 Predict");
+                button(
+                        "🎯 Predict"
+                );
 
         Button skip =
-            button("⏭ Skip");
+                button(
+                        "⏭ Skip"
+                );
+
+        Button chat =
+                button(
+                        "💬 Chat"
+                );
 
         content.addView(predict);
         content.addView(skip);
+        content.addView(chat);
+
+        loadPredictionPlayers(
+                spinner,
+                adapter
+        );
 
         predict.setOnClickListener(v -> {
 
-            if (players.getSelectedItem() == null) {
+            if (predictionSent) {
+
+                toast(
+                        "أرسلت توقعك بالفعل"
+                );
+
+                return;
+            }
+
+            if (
+                    spinner.getSelectedItem()
+                    == null
+            ) {
+
+                toast(
+                        "اختار لاعبًا"
+                );
+
                 return;
             }
 
             String target =
-                players.getSelectedItem()
-                    .toString();
+                    spinner
+                            .getSelectedItem()
+                            .toString();
 
-            String answer =
-                prediction.getText()
-                    .toString()
-                    .trim();
+            String predicted =
+                    prediction
+                            .getText()
+                            .toString()
+                            .trim();
 
-            if (answer.isEmpty()) {
-                Toast.makeText(
-                    this,
-                    "اكتب توقعك",
-                    Toast.LENGTH_SHORT
-                ).show();
+            if (predicted.isEmpty()) {
+
+                toast(
+                        "اكتب توقعك"
+                );
+
                 return;
             }
 
             submitPrediction(
-                target,
-                answer
+                    target,
+                    predicted
             );
         });
 
-        skip.setOnClickListener(v ->
-            nextRound()
+        skip.setOnClickListener(
+                v -> nextRound()
+        );
+
+        chat.setOnClickListener(
+                v -> chat()
         );
     }
 
-    void loadPredictionPlayers(
-        Spinner spinner,
-        ArrayAdapter<String> adapter
+    // =========================
+    // LOAD TARGET PLAYERS
+    // =========================
+
+    private void loadPredictionPlayers(
+            Spinner spinner,
+            ArrayAdapter<String> adapter
     ) {
 
         new Thread(() -> {
+
             try {
 
                 String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/players" +
-                    "?room_code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&select=name";
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=name";
 
-                JSONArray arr =
-                    new JSONArray(
-                        request("GET", url, null)
-                    );
+                JSONArray players =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        url,
+                                        null,
+                                        false
+                                )
+                        );
 
-                for (int i = 0;
-                     i < arr.length();
-                     i++) {
+                for (
+                        int i = 0;
+                        i < players.length();
+                        i++
+                ) {
 
                     String name =
-                        arr.getJSONObject(i)
-                            .optString("name");
+                            players
+                                    .getJSONObject(i)
+                                    .optString(
+                                            "name"
+                                    );
 
-                    if (!name.equals(playerName)) {
+                    if (
+                            !name.equals(
+                                    playerName
+                            )
+                    ) {
+
                         adapter.add(name);
                     }
                 }
 
-                runOnUiThread(() ->
-                    spinner.setAdapter(adapter)
+                runOnUiThread(
+                        () -> spinner
+                                .setAdapter(
+                                        adapter
+                                )
                 );
 
             } catch (Exception ignored) {
             }
+
         }).start();
     }
 
-    void submitPrediction(
-        String target,
-        String predicted
+    // =========================
+    // SUBMIT PREDICTION
+    // =========================
+
+    private void submitPrediction(
+            String target,
+            String predicted
     ) {
 
+        predictionSent = true;
+
         new Thread(() -> {
+
             try {
 
                 String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/round_answers" +
-                    "?room_code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&round=eq." +
-                    round +
-                    "&player_name=eq." +
-                    URLEncoder.encode(
-                        target,
-                        "UTF-8"
-                    ) +
-                    "&select=answer";
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/round_answers" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&round=eq." +
+                        round +
+                        "&player_name=eq." +
+                        URLEncoder.encode(
+                                target,
+                                "UTF-8"
+                        ) +
+                        "&select=answer";
 
-                JSONArray arr =
-                    new JSONArray(
-                        request("GET", url, null)
-                    );
+                JSONArray answers =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        url,
+                                        null,
+                                        false
+                                )
+                        );
 
-                if (arr.length() == 0) {
+                if (answers.length() == 0) {
+
                     throw new Exception(
-                        "اللاعب لم يرسل إجابته بعد"
+                            "إجابة اللاعب غير موجودة"
                     );
                 }
 
                 String actual =
-                    arr.getJSONObject(0)
-                        .optString("answer");
+                        answers
+                                .getJSONObject(0)
+                                .optString(
+                                        "answer"
+                                );
 
                 boolean correct =
-                    actual.equalsIgnoreCase(
-                        predicted.trim()
-                    );
+                        actual
+                                .trim()
+                                .equalsIgnoreCase(
+                                        predicted.trim()
+                                );
 
                 int points =
-                    correct ? 5 : 0;
+                        correct
+                        ? 5
+                        : 0;
 
-                JSONObject p =
-                    new JSONObject();
+                JSONObject prediction =
+                        new JSONObject();
 
-                p.put(
-                    "room_code",
-                    roomCode
+                prediction.put(
+                        "room_code",
+                        roomCode
                 );
 
-                p.put(
-                    "round",
-                    round
+                prediction.put(
+                        "round",
+                        round
                 );
 
-                p.put(
-                    "predictor",
-                    playerName
+                prediction.put(
+                        "predictor",
+                        playerName
                 );
 
-                p.put(
-                    "target",
-                    target
+                prediction.put(
+                        "target",
+                        target
                 );
 
-                p.put(
-                    "predicted_answer",
-                    predicted
+                prediction.put(
+                        "predicted_answer",
+                        predicted
                 );
 
-                p.put(
-                    "correct",
-                    correct
+                prediction.put(
+                        "correct",
+                        correct
                 );
 
-                p.put(
-                    "points",
-                    points
+                prediction.put(
+                        "points",
+                        points
                 );
 
                 request(
-                    "POST",
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/predictions",
-                    p.toString()
+                        "POST",
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/predictions",
+                        prediction.toString(),
+                        false
                 );
 
                 if (correct) {
+
                     score += 5;
+
                     updateScore();
                 }
 
-                runOnUiThread(() -> {
+                final int earned =
+                        points;
 
-                    Toast.makeText(
-                        this,
-                        correct
-                            ? "🎉 صحيح! +5"
-                            : "❌ غلط",
-                        Toast.LENGTH_SHORT
-                    ).show();
+                final boolean right =
+                        correct;
 
-                    nextRound();
-                });
+                runOnUiThread(
+                        () -> predictionResult(
+                                target,
+                                predicted,
+                                actual,
+                                right,
+                                earned
+                        )
+                );
 
             } catch (Exception e) {
 
-                runOnUiThread(() ->
-                    Toast.makeText(
-                        this,
-                        e.getMessage(),
-                        Toast.LENGTH_LONG
-                    ).show()
+                predictionSent = false;
+
+                runOnUiThread(
+                        () -> toast(
+                                "تعذر التوقع:\n" +
+                                e.getMessage()
+                        )
                 );
             }
+
         }).start();
     }
 
-    void updateScore() {
+    // =========================
+    // PREDICTION RESULT
+    // =========================
+
+    private void predictionResult(
+            String target,
+            String predicted,
+            String actual,
+            boolean correct,
+            int points
+    ) {
+
+        base();
+
+        content.addView(
+                title(
+                        correct
+                        ? "🎉 توقع صحيح!"
+                        : "❌ توقع خاطئ"
+                )
+        );
+
+        content.addView(
+                text(
+                        "👤 اللاعب: " +
+                        target +
+                        "\n\n" +
+                        "🎯 توقعك: " +
+                        predicted +
+                        "\n\n" +
+                        "💬 إجابته: " +
+                        actual +
+                        "\n\n" +
+                        "⭐ النقاط: +" +
+                        points +
+                        "\n" +
+                        "🏆 مجموعك: " +
+                        score,
+                        20
+                )
+        );
+
+        if (correct) {
+
+            content.addView(
+                    text(
+                            "🔥 +3 نقاط للتوقع الصحيح\n" +
+                            "✨ +2 Bonus للمطابقة\n" +
+                            "💥 المجموع +5!",
+                            18
+                    )
+            );
+        }
+
+        Button next =
+                button(
+                        "➡ Next Question"
+                );
+
+        Button chat =
+                button(
+                        "💬 Chat"
+                );
+
+        content.addView(next);
+        content.addView(chat);
+
+        next.setOnClickListener(
+                v -> nextRound()
+        );
+
+        chat.setOnClickListener(
+                v -> chat()
+        );
+    }
+
+    // =========================
+    // UPDATE SCORE
+    // =========================
+
+    private void updateScore() {
 
         new Thread(() -> {
+
             try {
 
                 String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/players" +
-                    "?room_code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&name=eq." +
-                    URLEncoder.encode(
-                        playerName,
-                        "UTF-8"
-                    );
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&name=eq." +
+                        URLEncoder.encode(
+                                playerName,
+                                "UTF-8"
+                        );
 
                 JSONObject data =
-                    new JSONObject();
+                        new JSONObject();
 
                 data.put(
-                    "score",
-                    score
+                        "score",
+                        score
                 );
 
                 request(
-                    "PATCH",
-                    url,
-                    data.toString()
+                        "PATCH",
+                        url,
+                        data.toString(),
+                        false
                 );
 
             } catch (Exception ignored) {
             }
+
         }).start();
     }
 
-    void nextRound() {
+    // =========================
+    // NEXT ROUND
+    // =========================
+
+    private void nextRound() {
 
         round++;
 
-        if (round >= questions.length) {
+        questionIndex++;
+
+        if (
+                questionIndex >=
+                questions.length
+        ) {
+
             leaderboard();
-        } else {
-            answerScreen();
+
+            return;
         }
+
+        if (isHost) {
+
+            updateGameState(
+                    questionIndex,
+                    "answering"
+            );
+        }
+
+        answerScreen();
     }
 
-    void leaderboard() {
+    // =========================
+    // LEADERBOARD
+    // =========================
+
+    private void leaderboard() {
 
         base();
 
         content.addView(
-            text(
-                "🏆 النتائج النهائية",
-                30
-            )
+                title(
+                        "🏆 النتائج النهائية"
+                )
         );
 
         TextView board =
-            text(
-                "جاري تحميل النتائج...",
-                21
-            );
+                text(
+                        "جاري تحميل الترتيب...",
+                        20
+                );
 
         content.addView(board);
 
-        new Thread(() -> {
-            try {
-
-                String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/players" +
-                    "?room_code=eq." +
-                    URLEncoder.encode(
-                        roomCode,
-                        "UTF-8"
-                    ) +
-                    "&select=name,score" +
-                    "&order=score.desc";
-
-                JSONArray arr =
-                    new JSONArray(
-                        request("GET", url, null)
-                    );
-
-                StringBuilder result =
-                    new StringBuilder();
-
-                for (int i = 0;
-                     i < arr.length();
-                     i++) {
-
-                    JSONObject p =
-                        arr.getJSONObject(i);
-
-                    result.append(
-                        i + 1
-                    )
-                    .append(". ")
-                    .append(
-                        p.optString("name")
-                    )
-                    .append(" — ")
-                    .append(
-                        p.optInt("score")
-                    )
-                    .append(" نقطة\n");
-                }
-
-                runOnUiThread(() ->
-                    board.setText(
-                        result.toString()
-                    )
-                );
-
-            } catch (Exception e) {
-
-                runOnUiThread(() ->
-                    board.setText(
-                        "تعذر تحميل النتائج"
-                    )
-                );
-            }
-        }).start();
+        loadLeaderboard(board);
 
         Button again =
-            button("🔄 Play Again");
+                button(
+                        "🔄 Play Again"
+                );
 
         Button room =
-            button("🏠 Room");
+                button(
+                        "🏠 Back to Room"
+                );
 
         content.addView(again);
         content.addView(room);
 
-        again.setOnClickListener(v -> {
-            round = 0;
-            score = 0;
-            startGame();
-        });
+        again.setOnClickListener(
+                v -> {
 
-        room.setOnClickListener(v ->
-            lobby()
+                    round = 0;
+                    questionIndex = 0;
+                    score = 0;
+
+                    resetScores();
+
+                    if (isHost) {
+                        updateGameState(
+                                0,
+                                "answering"
+                        );
+                    }
+
+                    answerScreen();
+                }
+        );
+
+        room.setOnClickListener(
+                v -> lobby()
         );
     }
 
-    void chat() {
+    // =========================
+    // LOAD LEADERBOARD
+    // =========================
+
+    private void loadLeaderboard(
+            TextView board
+    ) {
+
+        new Thread(() -> {
+
+            try {
+
+                String url =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=name,score" +
+                        "&order=score.desc";
+
+                JSONArray players =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        url,
+                                        null,
+                                        false
+                                )
+                        );
+
+                StringBuilder result =
+                        new StringBuilder();
+
+                for (
+                        int i = 0;
+                        i < players.length();
+                        i++
+                ) {
+
+                    JSONObject p =
+                            players
+                                    .getJSONObject(i);
+
+                    result.append(
+                            i + 1
+                    );
+
+                    result.append(
+                            ". "
+                    );
+
+                    result.append(
+                            p.optString(
+                                    "name"
+                            )
+                    );
+
+                    result.append(
+                            " — "
+                    );
+
+                    result.append(
+                            p.optInt(
+                                    "score"
+                            )
+                    );
+
+                    result.append(
+                            " نقطة\n"
+                    );
+                }
+
+                runOnUiThread(
+                        () -> board.setText(
+                                result.toString()
+                        )
+                );
+
+            } catch (Exception e) {
+
+                runOnUiThread(
+                        () -> board.setText(
+                                "تعذر تحميل النتائج"
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // RESET SCORES
+    // =========================
+
+    private void resetScores() {
+
+        new Thread(() -> {
+
+            try {
+
+                String url =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        );
+
+                JSONObject data =
+                        new JSONObject();
+
+                data.put(
+                        "score",
+                        0
+                );
+
+                data.put(
+                        "ready",
+                        false
+                );
+
+                request(
+                        "PATCH",
+                        url,
+                        data.toString(),
+                        false
+                );
+
+                score = 0;
+
+            } catch (Exception ignored) {
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // CHAT
+    // =========================
+
+    private void chat() {
 
         base();
 
         content.addView(
-            text("💬 Chat", 28)
+                title("💬 Chat")
         );
 
         TextView messages =
-            text(
-                "جاري تحميل الرسائل...",
-                18
-            );
+                text(
+                        "جاري تحميل الرسائل...",
+                        17
+                );
 
         content.addView(messages);
 
         EditText input =
-            new EditText(this);
+                new EditText(this);
 
         input.setHint(
-            "اكتب رسالة..."
+                "اكتب رسالة..."
+        );
+
+        input.setTextColor(
+                foreground()
+        );
+
+        input.setHintTextColor(
+                secondary()
         );
 
         content.addView(input);
 
         Button send =
-            button("Send");
+                button("📨 Send");
 
         Button back =
-            button("← Back");
+                button("← Back");
 
         content.addView(send);
         content.addView(back);
 
         loadMessages(messages);
 
+        startSync(
+                () -> loadMessages(messages)
+        );
+
         send.setOnClickListener(v -> {
 
             String message =
-                input.getText()
-                    .toString()
-                    .trim();
+                    input.getText()
+                            .toString()
+                            .trim();
 
             if (message.isEmpty()) {
                 return;
@@ -1170,288 +2198,538 @@ public class MainActivity extends Activity {
             sendMessage(message);
 
             input.setText("");
-
-            handler.postDelayed(
-                () -> loadMessages(messages),
-                500
-            );
         });
 
-        back.setOnClickListener(v ->
-            lobby()
+        back.setOnClickListener(
+                v -> lobby()
         );
     }
 
-    void sendMessage(String message) {
+    // =========================
+    // SEND MESSAGE
+    // =========================
+
+    private void sendMessage(
+            String message
+    ) {
 
         new Thread(() -> {
+
             try {
 
                 JSONObject data =
-                    new JSONObject();
+                        new JSONObject();
 
                 data.put(
-                    "room_id",
-                    roomId
+                        "room_id",
+                        roomId
                 );
 
                 data.put(
-                    "player_name",
-                    playerName
+                        "player_name",
+                        playerName
                 );
 
                 data.put(
-                    "message",
-                    message
+                        "message",
+                        message
                 );
 
                 request(
-                    "POST",
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/messages",
-                    data.toString()
+                        "POST",
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/messages",
+                        data.toString(),
+                        false
                 );
 
             } catch (Exception ignored) {
             }
+
         }).start();
     }
 
-    void loadMessages(TextView view) {
+    // =========================
+    // LOAD MESSAGES
+    // =========================
+
+    private void loadMessages(
+            TextView view
+    ) {
 
         new Thread(() -> {
+
             try {
 
                 String url =
-                    BuildConfig.SUPABASE_URL +
-                    "/rest/v1/messages" +
-                    "?room_id=eq." +
-                    URLEncoder.encode(
-                        roomId,
-                        "UTF-8"
-                    ) +
-                    "&select=player_name,message,created_at" +
-                    "&order=created_at.asc";
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/messages" +
+                        "?room_id=eq." +
+                        URLEncoder.encode(
+                                roomId,
+                                "UTF-8"
+                        ) +
+                        "&select=player_name,message,created_at" +
+                        "&order=created_at.asc";
 
-                JSONArray arr =
-                    new JSONArray(
-                        request("GET", url, null)
+                JSONArray messages =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        url,
+                                        null,
+                                        false
+                                )
+                        );
+
+                StringBuilder output =
+                        new StringBuilder();
+
+                if (messages.length() == 0) {
+
+                    output.append(
+                            "لا توجد رسائل بعد 👋"
                     );
+                }
 
-                StringBuilder out =
-                    new StringBuilder();
-
-                for (int i = 0;
-                     i < arr.length();
-                     i++) {
+                for (
+                        int i = 0;
+                        i < messages.length();
+                        i++
+                ) {
 
                     JSONObject m =
-                        arr.getJSONObject(i);
+                            messages
+                                    .getJSONObject(i);
 
-                    out.append("• ")
-                        .append(
-                            m.optString(
-                                "player_name"
-                            )
-                        )
-                        .append(": ")
-                        .append(
-                            m.optString(
-                                "message"
-                            )
-                        )
-                        .append("\n\n");
-                }
+                    output.append(
+                            "👤 "
+                    );
 
-                if (out.length() == 0) {
-                    out.append(
-                        "لا توجد رسائل بعد."
+                    output.append(
+                            m.optString(
+                                    "player_name"
+                            )
+                    );
+
+                    output.append(
+                            "\n"
+                    );
+
+                    output.append(
+                            m.optString(
+                                    "message"
+                            )
+                    );
+
+                    output.append(
+                            "\n\n"
                     );
                 }
 
-                runOnUiThread(() ->
-                    view.setText(
-                        out.toString()
-                    )
+                runOnUiThread(
+                        () -> view.setText(
+                                output.toString()
+                        )
                 );
 
-            } catch (Exception e) {
+            } catch (Exception ignored) {
 
-                runOnUiThread(() ->
-                    view.setText(
-                        "تعذر تحميل الرسائل"
-                    )
+                runOnUiThread(
+                        () -> view.setText(
+                                "تعذر تحميل الرسائل"
+                        )
                 );
             }
+
         }).start();
     }
 
-    void settings() {
+    // =========================
+    // SETTINGS
+    // =========================
+
+    private void settings() {
 
         base();
 
         content.addView(
-            text("⚙ Settings", 28)
+                title("⚙️ Settings")
         );
 
+        space();
+
         Switch darkSwitch =
-            new Switch(this);
+                new Switch(this);
 
         darkSwitch.setText(
-            "Dark Mode"
+                "🌙 Dark Mode"
+        );
+
+        darkSwitch.setTextColor(
+                foreground()
         );
 
         darkSwitch.setChecked(
-            dark
+                dark
         );
 
         content.addView(
-            darkSwitch
+                darkSwitch
+        );
+
+        space();
+
+        content.addView(
+                text(
+                        "🌐 Language\n" +
+                        "العربية • Français • English",
+                        17
+                )
+        );
+
+        space();
+
+        content.addView(
+                text(
+                        "🎮 GuessUs\n" +
+                        "Online party game",
+                        15
+                )
         );
 
         Button back =
-            button("← Back");
+                button("← Back");
 
         content.addView(back);
 
         darkSwitch.setOnCheckedChangeListener(
-            (b, checked) -> {
-                dark = checked;
-                settings();
+                (buttonView, checked) -> {
+
+                    dark = checked;
+
+                    settings();
+                }
+        );
+
+        back.setOnClickListener(
+                v -> home()
+        );
+    }
+
+    // =========================
+    // LEAVE ROOM
+    // =========================
+
+    private void leaveRoom() {
+
+        stopSync();
+
+        new Thread(() -> {
+
+            try {
+
+                String url =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/players" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&name=eq." +
+                        URLEncoder.encode(
+                                playerName,
+                                "UTF-8"
+                        );
+
+                request(
+                        "DELETE",
+                        url,
+                        null,
+                        false
+                );
+
+            } catch (Exception ignored) {
             }
-        );
 
-        back.setOnClickListener(v ->
-            home()
+            runOnUiThread(() -> {
+
+                roomCode = "";
+                roomId = "";
+                playerName = "";
+                score = 0;
+                round = 0;
+                questionIndex = 0;
+
+                home();
+            });
+
+        }).start();
+    }
+
+    // =========================
+    // GAME STATE
+    // =========================
+
+    private void updateGameState(
+            int index,
+            String status
+    ) {
+
+        new Thread(() -> {
+
+            try {
+
+                String find =
+                        BuildConfig.SUPABASE_URL +
+                        "/rest/v1/game_state" +
+                        "?room_code=eq." +
+                        URLEncoder.encode(
+                                roomCode,
+                                "UTF-8"
+                        ) +
+                        "&select=room_code";
+
+                JSONArray rows =
+                        new JSONArray(
+                                request(
+                                        "GET",
+                                        find,
+                                        null,
+                                        false
+                                )
+                        );
+
+                JSONObject data =
+                        new JSONObject();
+
+                data.put(
+                        "question_index",
+                        index
+                );
+
+                data.put(
+                        "status",
+                        status
+                );
+
+                if (rows.length() > 0) {
+
+                    request(
+                            "PATCH",
+                            BuildConfig.SUPABASE_URL +
+                            "/rest/v1/game_state" +
+                            "?room_code=eq." +
+                            URLEncoder.encode(
+                                    roomCode,
+                                    "UTF-8"
+                            ),
+                            data.toString(),
+                            false
+                    );
+
+                } else {
+
+                    data.put(
+                            "room_code",
+                            roomCode
+                    );
+
+                    request(
+                            "POST",
+                            BuildConfig.SUPABASE_URL +
+                            "/rest/v1/game_state",
+                            data.toString(),
+                            false
+                    );
+                }
+
+            } catch (Exception ignored) {
+            }
+
+        }).start();
+    }
+
+    // =========================
+    // SYNC
+    // =========================
+
+    private void startSync(
+            Runnable action
+    ) {
+
+        stopSync();
+
+        syncRunnable =
+                new Runnable() {
+
+                    @Override
+                    public void run() {
+
+                        action.run();
+
+                        handler.postDelayed(
+                                this,
+                                2000
+                        );
+                    }
+                };
+
+        handler.post(
+                syncRunnable
         );
     }
 
-    String request(
-        String method,
-        String urlString,
-        String body
-    ) throws Exception {
+    private void stopSync() {
 
-        return request(
-            method,
-            urlString,
-            body,
-            false
-        );
+        if (syncRunnable != null) {
+
+            handler.removeCallbacks(
+                    syncRunnable
+            );
+
+            syncRunnable = null;
+        }
     }
 
-    String request(
-        String method,
-        String urlString,
-        String body,
-        boolean returnBody
+    // =========================
+    // SUPABASE HTTP
+    // =========================
+
+    private String request(
+            String method,
+            String urlString,
+            String body,
+            boolean returnRepresentation
     ) throws Exception {
 
         URL url =
-            new URL(urlString);
+                new URL(urlString);
 
-        HttpURLConnection conn =
-            (HttpURLConnection)
-            url.openConnection();
+        HttpURLConnection connection =
+                (HttpURLConnection)
+                        url.openConnection();
 
-        conn.setRequestMethod(method);
-
-        conn.setRequestProperty(
-            "apikey",
-            BuildConfig.SUPABASE_KEY
+        connection.setRequestMethod(
+                method
         );
 
-        conn.setRequestProperty(
-            "Authorization",
-            "Bearer " +
-            BuildConfig.SUPABASE_KEY
+        connection.setConnectTimeout(
+                15000
         );
 
-        conn.setRequestProperty(
-            "Content-Type",
-            "application/json"
+        connection.setReadTimeout(
+                15000
         );
 
-        conn.setRequestProperty(
-            "Accept",
-            "application/json"
+        connection.setRequestProperty(
+                "apikey",
+                BuildConfig.SUPABASE_KEY
         );
 
-        if (returnBody) {
-            conn.setRequestProperty(
+        connection.setRequestProperty(
+                "Authorization",
+                "Bearer " +
+                BuildConfig.SUPABASE_KEY
+        );
+
+        connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+        );
+
+        connection.setRequestProperty(
+                "Accept",
+                "application/json"
+        );
+
+        connection.setRequestProperty(
                 "Prefer",
-                "return=representation"
-            );
-        } else {
-            conn.setRequestProperty(
-                "Prefer",
-                "return=minimal"
-            );
-        }
-
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(10000);
+                returnRepresentation
+                ? "return=representation"
+                : "return=minimal"
+        );
 
         if (body != null) {
 
-            conn.setDoOutput(true);
+            connection.setDoOutput(true);
 
-            OutputStream out =
-                conn.getOutputStream();
+            OutputStream output =
+                    connection.getOutputStream();
 
-            out.write(
-                body.getBytes("UTF-8")
+            output.write(
+                    body.getBytes("UTF-8")
             );
 
-            out.flush();
-            out.close();
+            output.flush();
+            output.close();
         }
 
-        int response =
-            conn.getResponseCode();
+        int code =
+                connection.getResponseCode();
 
-        InputStream stream =
-            response >= 200 &&
-            response < 400
-                ? conn.getInputStream()
-                : conn.getErrorStream();
+        InputStream stream;
+
+        if (
+                code >= 200 &&
+                code < 400
+        ) {
+
+            stream =
+                    connection.getInputStream();
+
+        } else {
+
+            stream =
+                    connection.getErrorStream();
+        }
 
         if (stream == null) {
+
             throw new IOException(
-                "HTTP " + response
+                    "HTTP " + code
             );
         }
 
         BufferedReader reader =
-            new BufferedReader(
-                new InputStreamReader(stream)
-            );
+                new BufferedReader(
+                        new InputStreamReader(
+                                stream
+                        )
+                );
 
         StringBuilder result =
-            new StringBuilder();
+                new StringBuilder();
 
         String line;
 
         while (
-            (line = reader.readLine()) != null
+                (line =
+                        reader.readLine())
+                        != null
         ) {
+
             result.append(line);
         }
 
         reader.close();
-        conn.disconnect();
 
-        if (response < 200 ||
-            response >= 300) {
+        connection.disconnect();
+
+        if (
+                code < 200 ||
+                code >= 300
+        ) {
 
             throw new IOException(
-                "HTTP " +
-                response +
-                ": " +
-                result
+                    "HTTP " +
+                    code +
+                    ": " +
+                    result
             );
         }
 
         return result.toString();
     }
-                  }
+}
