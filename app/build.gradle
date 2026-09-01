@@ -8,13 +8,26 @@ android {
 
     defaultConfig {
         applicationId 'com.guessus.app'
+
+        // Galaxy A10s يدعم Android 9 وما فوق
         minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName '1.0'
+
+        versionCode 2
+        versionName '1.1'
 
         buildConfigField "String", "SUPABASE_URL", "\"${SUPABASE_URL}\""
         buildConfigField "String", "SUPABASE_KEY", "\"${SUPABASE_KEY}\""
+    }
+
+    // دعم معالجات ARM الموجودة في هواتف Galaxy A10s
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a'
+            universalApk true
+        }
     }
 
     buildFeatures {
