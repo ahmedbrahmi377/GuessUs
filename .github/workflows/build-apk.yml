@@ -22,6 +22,17 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Configure Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          echo "SUPABASE_URL=$SUPABASE_URL" >> "$GITHUB_ENV"
+          echo "SUPABASE_KEY=$SUPABASE_KEY" >> "$GITHUB_ENV"
+
+      - name: Check Gradle
+        run: gradle --version
+
       - name: Build APK
         run: gradle :app:assembleDebug --no-daemon
 
