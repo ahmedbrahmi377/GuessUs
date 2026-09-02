@@ -2,13 +2,10 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Internet for Supabase / online multiplayer -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:name=".GuessUsApplication"
         android:allowBackup="true"
-        android:icon="@drawable/ic_launcher"
         android:label="GuessUs"
         android:resizeableActivity="true"
         android:supportsRtl="true"
