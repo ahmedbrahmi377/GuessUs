@@ -4,22 +4,35 @@
     <style name="AppTheme"
         parent="android:style/Theme.Material.Light.NoActionBar">
 
+        <!-- General -->
         <item name="android:fontFamily">sans</item>
         <item name="android:windowNoTitle">true</item>
-
         <item name="android:windowActionModeOverlay">true</item>
 
+        <!-- GuessUs primary color -->
         <item name="android:colorAccent">#6A55DC</item>
 
+        <!-- Background -->
         <item name="android:windowBackground">#F7F8FC</item>
 
+        <!-- Status bar -->
         <item name="android:statusBarColor">#F7F8FC</item>
-        <item name="android:navigationBarColor">#F7F8FC</item>
-
         <item name="android:windowLightStatusBar">true</item>
+
+        <!-- Navigation bar -->
+        <item name="android:navigationBarColor">#F7F8FC</item>
         <item name="android:windowLightNavigationBar">true</item>
 
+        <!-- Window -->
+        <item name="android:windowNoTitle">true</item>
         <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowIsTranslucent">false</item>
+
+        <!-- Prevent unwanted overscroll glow -->
+        <item name="android:windowContentTransitions">false</item>
+
+        <!-- Better text rendering -->
+        <item name="android:windowEnableSplitTouch">true</item>
 
     </style>
 
