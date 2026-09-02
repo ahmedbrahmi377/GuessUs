@@ -1,9 +1,17 @@
 package com.guessus.app;
 
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.media.MediaPlayer;
+import android.media.ToneGenerator;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
@@ -13,10 +21,12 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AlphaAnimation;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -41,7 +51,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class MainActivity extends android.app.Activity {
+public class MainActivity extends Activity {
 
     // ============================================================
     // SUPABASE
@@ -51,7 +61,14 @@ public class MainActivity extends android.app.Activity {
     private final String SUPABASE_KEY = BuildConfig.SUPABASE_KEY;
 
     // ============================================================
-    // GAME DATA
+    // GAME SETTINGS
+    // ============================================================
+
+    private static final int MAX_PLAYERS = 2;
+    private static final int ANSWER_TIME = 45;
+
+    // ============================================================
+    // PLAYER / ROOM
     // ============================================================
 
     private String roomCode = "";
@@ -69,15 +86,15 @@ public class MainActivity extends android.app.Activity {
 
     private String currentScreen = "";
 
-    private CountDownTimer answerTimer;
-
-    private final Handler handler =
-            new Handler(Looper.getMainLooper());
-
-    private final AtomicBoolean pollingBusy =
-            new AtomicBoolean(false);
+    // ============================================================
+    // SETTINGS
+    // ============================================================
 
     private SharedPreferences prefs;
+
+    private boolean darkMode;
+    private boolean musicEnabled;
+    private boolean soundEnabled;
 
     // ============================================================
     // COLORS
@@ -90,7 +107,24 @@ public class MainActivity extends android.app.Activity {
     private int accentColor;
     private int buttonTextColor;
 
-    private boolean darkMode;
+    // ============================================================
+    // MEDIA
+    // ============================================================
+
+    private MediaPlayer musicPlayer;
+    private ToneGenerator toneGenerator;
+
+    // ============================================================
+    // TIMERS / HANDLERS
+    // ============================================================
+
+    private CountDownTimer answerTimer;
+
+    private final Handler handler =
+            new Handler(Looper.getMainLooper());
+
+    private final AtomicBoolean pollingBusy =
+            new AtomicBoolean(false);
 
     // ============================================================
     // QUESTIONS
@@ -155,7 +189,7 @@ public class MainActivity extends android.app.Activity {
     };
 
     // ============================================================
-    // LIFECYCLE
+    // CREATE
     // ============================================================
 
     @Override
@@ -170,6 +204,16 @@ public class MainActivity extends android.app.Activity {
         darkMode = prefs.getBoolean(
                 "dark_mode",
                 false
+        );
+
+        musicEnabled = prefs.getBoolean(
+                "music_enabled",
+                true
+        );
+
+        soundEnabled = prefs.getBoolean(
+                "sound_enabled",
+                true
         );
 
         setupTheme();
@@ -192,7 +236,36 @@ public class MainActivity extends android.app.Activity {
                     .apply();
         }
 
+        initSound();
+
         showHome();
+
+        if (musicEnabled) {
+            startMusic();
+        }
+    }
+
+    // ============================================================
+    // LIFECYCLE
+    // ============================================================
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (musicEnabled &&
+                currentScreen != null &&
+                !currentScreen.equals("chat")) {
+
+            startMusic();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        pauseMusic();
     }
 
     @Override
@@ -202,7 +275,51 @@ public class MainActivity extends android.app.Activity {
 
         handler.removeCallbacksAndMessages(null);
 
+        releaseMusic();
+
+        if (toneGenerator != null) {
+
+            toneGenerator.release();
+
+            toneGenerator = null;
+        }
+
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+
+        if ("home".equals(currentScreen)) {
+
+            super.onBackPressed();
+
+            return;
+        }
+
+        if ("lobby".equals(currentScreen) ||
+                "answer".equals(currentScreen) ||
+                "waiting_answers".equals(currentScreen) ||
+                "prediction".equals(currentScreen) ||
+                "prediction_waiting".equals(currentScreen) ||
+                "results".equals(currentScreen) ||
+                "waiting_next".equals(currentScreen) ||
+                "leaderboard".equals(currentScreen) ||
+                "chat".equals(currentScreen)) {
+
+            if (!roomCode.isEmpty()) {
+
+                showLobby();
+
+            } else {
+
+                showHome();
+            }
+
+            return;
+        }
+
+        showHome();
     }
 
     // ============================================================
@@ -295,7 +412,223 @@ public class MainActivity extends android.app.Activity {
 
         setupTheme();
 
+        playClick();
+
         showSettings();
+    }
+
+    private void toggleMusic() {
+
+        musicEnabled = !musicEnabled;
+
+        prefs.edit()
+                .putBoolean(
+                        "music_enabled",
+                        musicEnabled
+                )
+                .apply();
+
+        if (musicEnabled) {
+
+            startMusic();
+
+        } else {
+
+            stopMusic();
+        }
+
+        playClick();
+
+        showSettings();
+    }
+
+    private void toggleSound() {
+
+        soundEnabled = !soundEnabled;
+
+        prefs.edit()
+                .putBoolean(
+                        "sound_enabled",
+                        soundEnabled
+                )
+                .apply();
+
+        if (soundEnabled) {
+            playClick();
+        }
+
+        showSettings();
+    }
+
+    // ============================================================
+    // MUSIC
+    // ============================================================
+
+    private void initSound() {
+
+        try {
+
+            toneGenerator =
+                    new ToneGenerator(
+                            AudioManager.STREAM_MUSIC,
+                            70
+                    );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void startMusic() {
+
+        if (!musicEnabled) {
+            return;
+        }
+
+        try {
+
+            if (musicPlayer == null) {
+
+                int resourceId =
+                        getResources()
+                                .getIdentifier(
+                                        "bg_music",
+                                        "raw",
+                                        getPackageName()
+                                );
+
+                if (resourceId == 0) {
+                    return;
+                }
+
+                musicPlayer =
+                        MediaPlayer.create(
+                                this,
+                                resourceId
+                        );
+
+                if (musicPlayer == null) {
+                    return;
+                }
+
+                musicPlayer.setLooping(true);
+
+                musicPlayer.setVolume(
+                        0.35f,
+                        0.35f
+                );
+            }
+
+            if (!musicPlayer.isPlaying()) {
+
+                musicPlayer.start();
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void pauseMusic() {
+
+        try {
+
+            if (musicPlayer != null &&
+                    musicPlayer.isPlaying()) {
+
+                musicPlayer.pause();
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void stopMusic() {
+
+        try {
+
+            if (musicPlayer != null) {
+
+                if (musicPlayer.isPlaying()) {
+                    musicPlayer.stop();
+                }
+
+                musicPlayer.release();
+
+                musicPlayer = null;
+            }
+
+        } catch (Exception ignored) {
+
+            musicPlayer = null;
+        }
+    }
+
+    private void releaseMusic() {
+
+        try {
+
+            if (musicPlayer != null) {
+
+                musicPlayer.release();
+
+                musicPlayer = null;
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void playClick() {
+
+        if (!soundEnabled ||
+                toneGenerator == null) {
+            return;
+        }
+
+        try {
+
+            toneGenerator.startTone(
+                    ToneGenerator.TONE_PROP_BEEP,
+                    70
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void playSuccess() {
+
+        if (!soundEnabled ||
+                toneGenerator == null) {
+            return;
+        }
+
+        try {
+
+            toneGenerator.startTone(
+                    ToneGenerator.TONE_PROP_ACK,
+                    120
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void playWrong() {
+
+        if (!soundEnabled ||
+                toneGenerator == null) {
+            return;
+        }
+
+        try {
+
+            toneGenerator.startTone(
+                    ToneGenerator.TONE_PROP_NACK,
+                    150
+            );
+
+        } catch (Exception ignored) {
+        }
     }
 
     // ============================================================
@@ -344,6 +677,8 @@ public class MainActivity extends android.app.Activity {
 
         scroll.setFillViewport(true);
 
+        scroll.setClipToPadding(false);
+
         scroll.addView(child);
 
         return scroll;
@@ -368,7 +703,7 @@ public class MainActivity extends android.app.Activity {
 
         tv.setTypeface(
                 null,
-                android.graphics.Typeface.BOLD
+                Typeface.BOLD
         );
 
         tv.setPadding(
@@ -420,6 +755,11 @@ public class MainActivity extends android.app.Activity {
         );
 
         tv.setTextSize(16);
+
+        tv.setTypeface(
+                null,
+                Typeface.BOLD
+        );
 
         tv.setPadding(
                 dp(4),
@@ -495,6 +835,10 @@ public class MainActivity extends android.app.Activity {
 
         b.setAllCaps(false);
 
+        b.setGravity(
+                Gravity.CENTER
+        );
+
         GradientDrawable drawable =
                 new GradientDrawable();
 
@@ -524,6 +868,10 @@ public class MainActivity extends android.app.Activity {
         );
 
         b.setLayoutParams(params);
+
+        b.setOnClickListener(
+                v -> playClick()
+        );
 
         return b;
     }
@@ -597,6 +945,19 @@ public class MainActivity extends android.app.Activity {
         return e;
     }
 
+    private void animateIn(View view) {
+
+        AlphaAnimation animation =
+                new AlphaAnimation(
+                        0.0f,
+                        1.0f
+                );
+
+        animation.setDuration(350);
+
+        view.startAnimation(animation);
+    }
+
     private void toast(String text) {
 
         Toast.makeText(
@@ -614,6 +975,8 @@ public class MainActivity extends android.app.Activity {
         currentScreen = name;
 
         setContentView(view);
+
+        animateIn(view);
     }
 
     // ============================================================
@@ -627,9 +990,14 @@ public class MainActivity extends android.app.Activity {
         LinearLayout root =
                 root();
 
-        root.setBackgroundResource(
-                R.drawable.bg_home
-        );
+        try {
+
+            root.setBackgroundResource(
+                    R.drawable.bg_home
+            );
+
+        } catch (Exception ignored) {
+        }
 
         TextView logo =
                 title("GuessUs");
@@ -638,24 +1006,31 @@ public class MainActivity extends android.app.Activity {
                 Color.WHITE
         );
 
-        logo.setTextSize(42);
+        logo.setTextSize(44);
+
+        logo.setTypeface(
+                null,
+                Typeface.BOLD
+        );
 
         root.addView(
                 logo,
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
-                        dp(180)
+                        dp(170)
                 )
         );
 
         TextView info =
                 subtitle(
-                        "توقّع إجابات أصحابك وشوف شكون يعرف شكون أكثر 🎯"
+                        "توقّع إجابات صاحبك وشوف شكون يعرف شكون أكثر 🎯"
                 );
 
         info.setTextColor(
                 Color.WHITE
         );
+
+        info.setTextSize(16);
 
         root.addView(info);
 
@@ -686,6 +1061,19 @@ public class MainActivity extends android.app.Activity {
 
         root.addView(settings);
 
+        TextView features =
+                subtitle(
+                        "👥 لاعبان • 🎯 توقع • 💬 Chat • 🏆 نقاط • 🎵 موسيقى"
+                );
+
+        features.setTextColor(
+                Color.WHITE
+        );
+
+        features.setTextSize(14);
+
+        root.addView(features);
+
         TextView version =
                 subtitle(
                         "GuessUs • Online Party Game"
@@ -701,6 +1089,10 @@ public class MainActivity extends android.app.Activity {
                 scroll(root),
                 "home"
         );
+
+        if (musicEnabled) {
+            startMusic();
+        }
     }
 
     // ============================================================
@@ -713,12 +1105,12 @@ public class MainActivity extends android.app.Activity {
                 root();
 
         root.addView(
-                title("إنشاء غرفة")
+                title("إنشاء غرفة 🎮")
         );
 
         root.addView(
                 subtitle(
-                        "اكتب اسمك وابدأ غرفة جديدة"
+                        "أنت الـHost. ادخل اسمك ثم شارك الكود مع صاحبك."
                 )
         );
 
@@ -810,6 +1202,7 @@ public class MainActivity extends android.app.Activity {
                     new JSONArray(result);
 
             if (rooms.length() == 0) {
+
                 throw new Exception(
                         "room creation failed"
                 );
@@ -893,7 +1286,7 @@ public class MainActivity extends android.app.Activity {
     }
 
     // ============================================================
-    // JOIN ROOM
+    // JOIN
     // ============================================================
 
     private void showJoinRoom() {
@@ -902,12 +1295,12 @@ public class MainActivity extends android.app.Activity {
                 root();
 
         root.addView(
-                title("الانضمام")
+                title("الانضمام 🚪")
         );
 
         root.addView(
                 subtitle(
-                        "ادخل كود الغرفة واسمك"
+                        "ادخل اسمك وكود الغرفة المكوّن من 4 أرقام."
                 )
         );
 
@@ -1021,6 +1414,7 @@ public class MainActivity extends android.app.Activity {
                     new JSONArray(result);
 
             if (rooms.length() == 0) {
+
                 throw new Exception(
                         "الغرفة غير موجودة"
                 );
@@ -1055,7 +1449,7 @@ public class MainActivity extends android.app.Activity {
             JSONArray players =
                     getPlayers();
 
-            if (players.length() >= 6) {
+            if (players.length() >= MAX_PLAYERS) {
 
                 throw new Exception(
                         "الغرفة ممتلئة"
@@ -1201,17 +1595,40 @@ public class MainActivity extends android.app.Activity {
 
         TextView room =
                 subtitle(
-                        "كود الغرفة: " +
+                        "كود الغرفة\n" +
                                 roomCode
                 );
 
-        room.setTextSize(21);
+        room.setTextSize(23);
 
         room.setTextColor(
                 textColor
         );
 
+        room.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
         root.addView(room);
+
+        Button copy =
+                button("📋 نسخ الكود");
+
+        copy.setOnClickListener(
+                v -> copyRoomCode()
+        );
+
+        root.addView(copy);
+
+        Button share =
+                button("📤 مشاركة الكود");
+
+        share.setOnClickListener(
+                v -> shareRoomCode()
+        );
+
+        root.addView(share);
 
         LinearLayout playersCard =
                 card();
@@ -1246,6 +1663,8 @@ public class MainActivity extends android.app.Activity {
                 try {
 
                     setPlayerReady(true);
+
+                    playSuccess();
 
                     runOnUiThread(() -> {
 
@@ -1291,10 +1710,10 @@ public class MainActivity extends android.app.Activity {
                         JSONArray players =
                                 getPlayers();
 
-                        if (players.length() < 2) {
+                        if (players.length() != 2) {
 
                             throw new Exception(
-                                    "يلزم لاعبان على الأقل"
+                                    "يلزم لاعبان بالضبط"
                             );
                         }
 
@@ -1312,7 +1731,7 @@ public class MainActivity extends android.app.Activity {
                                     )) {
 
                                 throw new Exception(
-                                        "لازم كل اللاعبين يعملوا Ready"
+                                        "لازم الاثنين يعملوا Ready"
                                 );
                             }
                         }
@@ -1369,7 +1788,7 @@ public class MainActivity extends android.app.Activity {
         root.addView(chat);
 
         Button leave =
-                button("🚪 مغادرة");
+                button("🚪 مغادرة الغرفة");
 
         leave.setOnClickListener(
                 v -> leaveRoom()
@@ -1382,6 +1801,57 @@ public class MainActivity extends android.app.Activity {
         setScreen(
                 scroll(root),
                 "lobby"
+        );
+    }
+
+    private void copyRoomCode() {
+
+        ClipboardManager clipboard =
+                (ClipboardManager)
+                        getSystemService(
+                                Context.CLIPBOARD_SERVICE
+                        );
+
+        if (clipboard != null) {
+
+            clipboard.setPrimaryClip(
+                    ClipData.newPlainText(
+                            "GuessUs Room",
+                            roomCode
+                    )
+            );
+
+            playSuccess();
+
+            toast(
+                    "تم نسخ كود الغرفة 📋"
+            );
+        }
+    }
+
+    private void shareRoomCode() {
+
+        Intent intent =
+                new Intent(
+                        Intent.ACTION_SEND
+                );
+
+        intent.setType(
+                "text/plain"
+        );
+
+        intent.putExtra(
+                Intent.EXTRA_TEXT,
+                "🎮 تعال نلعب GuessUs!\n" +
+                        "كود الغرفة: " +
+                        roomCode
+        );
+
+        startActivity(
+                Intent.createChooser(
+                        intent,
+                        "مشاركة كود GuessUs"
+                )
         );
     }
 
@@ -1407,7 +1877,9 @@ public class MainActivity extends android.app.Activity {
                     header.setText(
                             "اللاعبين (" +
                                     players.length() +
-                                    "/6)"
+                                    "/" +
+                                    MAX_PLAYERS +
+                                    ")"
                     );
 
                     header.setTextColor(
@@ -1418,7 +1890,7 @@ public class MainActivity extends android.app.Activity {
 
                     header.setTypeface(
                             null,
-                            android.graphics.Typeface.BOLD
+                            Typeface.BOLD
                     );
 
                     card.addView(header);
@@ -1526,6 +1998,8 @@ public class MainActivity extends android.app.Activity {
                                         status.setText(
                                                 "متصل • " +
                                                         players.length() +
+                                                        " / " +
+                                                        MAX_PLAYERS +
                                                         " لاعبين"
                                         )
                                 );
@@ -1657,6 +2131,38 @@ public class MainActivity extends android.app.Activity {
                 )
         );
 
+        ProgressBar progress =
+                new ProgressBar(
+                        this,
+                        null,
+                        android.R.attr.progressBarStyleHorizontal
+                );
+
+        progress.setMax(
+                questions.length
+        );
+
+        progress.setProgress(
+                questionIndex + 1
+        );
+
+        LinearLayout.LayoutParams pp =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(8)
+                );
+
+        pp.setMargins(
+                dp(8),
+                dp(4),
+                dp(8),
+                dp(14)
+        );
+
+        progress.setLayoutParams(pp);
+
+        root.addView(progress);
+
         LinearLayout qCard =
                 card();
 
@@ -1677,6 +2183,11 @@ public class MainActivity extends android.app.Activity {
                 Gravity.CENTER
         );
 
+        q.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
         q.setPadding(
                 dp(5),
                 dp(20),
@@ -1689,12 +2200,21 @@ public class MainActivity extends android.app.Activity {
         root.addView(qCard);
 
         TextView timer =
-                subtitle("45 ثانية");
+                subtitle(
+                        "⏱️ " +
+                                ANSWER_TIME +
+                                " ثانية"
+                );
 
         timer.setTextSize(20);
 
         timer.setTextColor(
                 accentColor
+        );
+
+        timer.setTypeface(
+                null,
+                Typeface.BOLD
         );
 
         root.addView(timer);
@@ -1852,7 +2372,7 @@ public class MainActivity extends android.app.Activity {
 
         answerTimer =
                 new CountDownTimer(
-                        45000,
+                        ANSWER_TIME * 1000L,
                         1000
                 ) {
 
@@ -1992,24 +2512,28 @@ public class MainActivity extends android.app.Activity {
 
         root.addView(
                 title(
-                        "⏳ نستنّاو البقية"
+                        "⏳ نستنّاو صاحبك"
                 )
         );
 
         TextView info =
                 subtitle(
                         "تم إرسال إجابتك بنجاح.\n" +
-                                "الجولة تنتقل تلقائيًا بعد إجابات الجميع."
+                                "كي يكمل اللاعب الآخر، تبدأ مرحلة التوقع."
                 );
 
         root.addView(info);
 
         TextView counter =
                 subtitle(
-                        "الإجابات: 0"
+                        "الإجابات: 0 / 2"
                 );
 
         counter.setTextSize(19);
+
+        counter.setTextColor(
+                accentColor
+        );
 
         root.addView(counter);
 
@@ -2105,7 +2629,7 @@ public class MainActivity extends android.app.Activity {
                                 }
 
                                 if (count >= total &&
-                                        total >= 2 &&
+                                        total == 2 &&
                                         isHost) {
 
                                     setGameState(
@@ -2151,12 +2675,12 @@ public class MainActivity extends android.app.Activity {
                 root();
 
         root.addView(
-                title("🎯 توقّع")
+                title("🎯 وقت التوقع!")
         );
 
         root.addView(
                 subtitle(
-                        "اختار لاعب وتوقّع شنوّة كانت إجابته."
+                        "اختار صاحبك وتوقّع بالضبط شنوّة كتب."
                 )
         );
 
@@ -2178,6 +2702,11 @@ public class MainActivity extends android.app.Activity {
 
         question.setGravity(
                 Gravity.CENTER
+        );
+
+        question.setTypeface(
+                null,
+                Typeface.BOLD
         );
 
         question.setPadding(
@@ -2226,6 +2755,17 @@ public class MainActivity extends android.app.Activity {
                         "شنوّة تتوقع جاوب؟"
                 );
 
+        prediction.setSingleLine(false);
+
+        prediction.setMinHeight(
+                dp(90)
+        );
+
+        prediction.setGravity(
+                Gravity.TOP |
+                        Gravity.RIGHT
+        );
+
         root.addView(prediction);
 
         Button submit =
@@ -2238,8 +2778,6 @@ public class MainActivity extends android.app.Activity {
 
         root.addView(skip);
 
-        // مهم:
-        // الزر يكون معطّل حتى يتم تحميل أسماء اللاعبين.
         submit.setEnabled(false);
 
         skip.setEnabled(false);
@@ -2253,19 +2791,6 @@ public class MainActivity extends android.app.Activity {
         submit.setOnClickListener(v -> {
 
             if (predictionSent) {
-                return;
-            }
-
-            int position =
-                    spinner
-                            .getSelectedItemPosition();
-
-            if (position < 0) {
-
-                toast(
-                        "اختار لاعب"
-                );
-
                 return;
             }
 
@@ -2341,19 +2866,6 @@ public class MainActivity extends android.app.Activity {
         skip.setOnClickListener(v -> {
 
             if (predictionSent) {
-                return;
-            }
-
-            int position =
-                    spinner
-                            .getSelectedItemPosition();
-
-            if (position < 0) {
-
-                toast(
-                        "اختار لاعب"
-                );
-
                 return;
             }
 
@@ -2462,7 +2974,7 @@ public class MainActivity extends android.app.Activity {
                     if (names.isEmpty()) {
 
                         toast(
-                                "ما فماش لاعب متاح للتوقع"
+                                "ما فماش لاعب متاح"
                         );
 
                         return;
@@ -2495,10 +3007,6 @@ public class MainActivity extends android.app.Activity {
                                     );
 
                                     view.setTextSize(16);
-
-                                    view.setGravity(
-                                            Gravity.CENTER_VERTICAL
-                                    );
 
                                     view.setPadding(
                                             dp(12),
@@ -2565,6 +3073,10 @@ public class MainActivity extends android.app.Activity {
         }).start();
     }
 
+    // ============================================================
+    // PREDICTION LOGIC
+    // ============================================================
+
     private void submitPrediction(
             String target,
             String predicted
@@ -2580,20 +3092,32 @@ public class MainActivity extends android.app.Activity {
                                 targetAnswer
                         );
 
-        int points =
-                correct ? 3 : 0;
+        int points = 0;
 
-        // +2 إضافية إذا كانت الإجابة مطابقة
-        // بعد التطبيع العربي.
-        if (correct &&
-                normalize(predicted)
-                        .equals(
-                                normalize(
-                                        targetAnswer
-                                )
-                        )) {
+        /*
+         * النظام:
+         *
+         * توقع صحيح = +3
+         *
+         * إذا كان توقعك مطابقًا تمامًا
+         * لإجابة اللاعب = +2 إضافية
+         *
+         * المجموع = +5
+         */
 
-            points += 2;
+        if (correct) {
+
+            points = 3;
+
+            if (normalize(predicted)
+                    .equals(
+                            normalize(
+                                    targetAnswer
+                            )
+                    )) {
+
+                points += 2;
+            }
         }
 
         JSONObject prediction =
@@ -2646,6 +3170,12 @@ public class MainActivity extends android.app.Activity {
             score += points;
 
             updateMyScore();
+
+            playSuccess();
+
+        } else {
+
+            playWrong();
         }
     }
 
@@ -2708,19 +3238,32 @@ public class MainActivity extends android.app.Activity {
 
         TextView info =
                 subtitle(
-                        "نستنّاو بقية اللاعبين يكملوا التوقع."
+                        "نستنّاو اللاعب الآخر يكمل."
                 );
 
         root.addView(info);
 
         TextView counter =
                 subtitle(
-                        "التوقعات: 0"
+                        "التوقعات: 0 / 2"
                 );
 
         counter.setTextSize(19);
 
+        counter.setTextColor(
+                accentColor
+        );
+
         root.addView(counter);
+
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
+        root.addView(chat);
 
         setScreen(
                 scroll(root),
@@ -2794,7 +3337,7 @@ public class MainActivity extends android.app.Activity {
                                 }
 
                                 if (count >= total &&
-                                        total >= 2 &&
+                                        total == 2 &&
                                         isHost) {
 
                                     setGameState(
@@ -2853,17 +3396,17 @@ public class MainActivity extends android.app.Activity {
                 root();
 
         root.addView(
-                title("🏆 النتيجة")
+                title("🏆 نتيجة الجولة")
         );
 
-        LinearLayout card =
+        LinearLayout scoreCard =
                 card();
 
         TextView scoreText =
                 new TextView(this);
 
         scoreText.setText(
-                "نقاطك: " +
+                "⭐ نقاطك\n" +
                         score
         );
 
@@ -2877,15 +3420,20 @@ public class MainActivity extends android.app.Activity {
                 Gravity.CENTER
         );
 
-        card.addView(scoreText);
+        scoreText.setTypeface(
+                null,
+                Typeface.BOLD
+        );
 
-        root.addView(card);
+        scoreCard.addView(scoreText);
 
-        loadRoundResult(card);
+        root.addView(scoreCard);
+
+        loadRoundResult(scoreCard);
 
         Button next =
                 button(
-                        "➡️ أنا جاهز للجولة التالية"
+                        "➡️ جاهز للجولة التالية"
                 );
 
         next.setOnClickListener(v -> {
@@ -3005,9 +3553,7 @@ public class MainActivity extends android.app.Activity {
                                     ? "🎯 توقّع صحيح!\n+" +
                                             points +
                                             " نقاط"
-                                    : "❌ التوقع ما صابش\n+" +
-                                            points +
-                                            " نقاط"
+                                    : "❌ التوقع ما صابش\n0 نقاط"
                     );
 
                     result.setTextColor(
@@ -3036,6 +3582,10 @@ public class MainActivity extends android.app.Activity {
         }).start();
     }
 
+    // ============================================================
+    // NEXT ROUND
+    // ============================================================
+
     private void waitForNextRound() {
 
         LinearLayout root =
@@ -3047,7 +3597,7 @@ public class MainActivity extends android.app.Activity {
 
         TextView text =
                 subtitle(
-                        "نستنّاو بقية اللاعبين..."
+                        "نستنّاو اللاعب الآخر..."
                 );
 
         root.addView(text);
@@ -3120,8 +3670,11 @@ public class MainActivity extends android.app.Activity {
                                 JSONArray players =
                                         getPlayers();
 
-                                boolean allReady =
-                                        players.length() >= 2;
+                                if (players.length() != 2) {
+                                    return;
+                                }
+
+                                boolean allReady = true;
 
                                 for (
                                         int i = 0;
@@ -3164,7 +3717,7 @@ public class MainActivity extends android.app.Activity {
     }
 
     // ============================================================
-    // ADVANCE ROUND
+    // ADVANCE
     // ============================================================
 
     private void advanceRound() {
@@ -3228,12 +3781,11 @@ public class MainActivity extends android.app.Activity {
                 title("🏆 Leaderboard")
         );
 
-        TextView subtitle =
+        root.addView(
                 subtitle(
                         "النتائج النهائية"
-                );
-
-        root.addView(subtitle);
+                )
+        );
 
         LinearLayout card =
                 card();
@@ -3306,12 +3858,15 @@ public class MainActivity extends android.app.Activity {
                         String medal;
 
                         if (i == 0) {
+
                             medal = "🥇";
+
                         } else if (i == 1) {
+
                             medal = "🥈";
-                        } else if (i == 2) {
-                            medal = "🥉";
+
                         } else {
+
                             medal = "🏅";
                         }
 
@@ -3321,7 +3876,7 @@ public class MainActivity extends android.app.Activity {
                                         (i + 1) +
                                         ". " +
                                         name +
-                                        "\n      " +
+                                        "\n      ⭐ " +
                                         points +
                                         " نقطة"
                         );
@@ -3330,16 +3885,78 @@ public class MainActivity extends android.app.Activity {
                                 textColor
                         );
 
-                        row.setTextSize(18);
+                        row.setTextSize(19);
 
                         row.setPadding(
                                 0,
-                                dp(12),
+                                dp(14),
                                 0,
-                                dp(12)
+                                dp(14)
                         );
 
                         card.addView(row);
+                    }
+
+                    if (list.size() == 2) {
+
+                        int first =
+                                list.get(0)
+                                        .optInt(
+                                                "score",
+                                                0
+                                        );
+
+                        int second =
+                                list.get(1)
+                                        .optInt(
+                                                "score",
+                                                0
+                                        );
+
+                        TextView winner =
+                                new TextView(this);
+
+                        if (first == second) {
+
+                            winner.setText(
+                                    "🤝 تعادل!"
+                            );
+
+                        } else {
+
+                            winner.setText(
+                                    "👑 الفائز: " +
+                                            list.get(0)
+                                                    .optString(
+                                                            "name",
+                                                            "?"
+                                                    )
+                            );
+                        }
+
+                        winner.setTextColor(
+                                accentColor
+                        );
+
+                        winner.setTextSize(22);
+
+                        winner.setGravity(
+                                Gravity.CENTER
+                        );
+
+                        winner.setTypeface(
+                                null,
+                                Typeface.BOLD
+                        );
+
+                        winner.setPadding(
+                                0,
+                                dp(15),
+                                0,
+                                dp(5)
+                        );
+
+                        card.addView(winner);
                     }
                 });
 
@@ -3567,7 +4184,7 @@ public class MainActivity extends android.app.Activity {
     }
 
     // ============================================================
-    // HOST TRANSFER / LEAVE
+    // LEAVE / HOST TRANSFER
     // ============================================================
 
     private void leaveRoom() {
@@ -3588,7 +4205,8 @@ public class MainActivity extends android.app.Activity {
                     ) {
 
                         JSONObject p =
-                                players.getJSONObject(i);
+                                players
+                                        .getJSONObject(i);
 
                         String id =
                                 p.optString(
@@ -3715,7 +4333,6 @@ public class MainActivity extends android.app.Activity {
                 status
         );
 
-        // متوافق مع Android API 23.
         update.put(
                 "updated_at",
                 getCurrentTimestamp()
@@ -3783,6 +4400,12 @@ public class MainActivity extends android.app.Activity {
                 title("💬 Chat")
         );
 
+        root.addView(
+                subtitle(
+                        "احكوا مع بعض أثناء اللعب."
+                )
+        );
+
         LinearLayout messages =
                 card();
 
@@ -3792,6 +4415,12 @@ public class MainActivity extends android.app.Activity {
                 input(
                         "اكتب رسالة..."
                 );
+
+        message.setSingleLine(false);
+
+        message.setMinHeight(
+                dp(65)
+        );
 
         root.addView(message);
 
@@ -3931,11 +4560,15 @@ public class MainActivity extends android.app.Activity {
                                 new TextView(this);
 
                         empty.setText(
-                                "ما فما حتى رسالة."
+                                "ما فما حتى رسالة 👀"
                         );
 
                         empty.setTextColor(
                                 secondaryTextColor
+                        );
+
+                        empty.setGravity(
+                                Gravity.CENTER
                         );
 
                         container.addView(
@@ -3974,8 +4607,10 @@ public class MainActivity extends android.app.Activity {
                                 new TextView(this);
 
                         row.setText(
-                                name +
-                                        ": " +
+                                "👤 " +
+                                        name +
+                                        "\n" +
+                                        "   " +
                                         text
                         );
 
@@ -4046,14 +4681,14 @@ public class MainActivity extends android.app.Activity {
                 title("⚙️ الإعدادات")
         );
 
-        LinearLayout card =
+        LinearLayout appearance =
                 card();
 
-        TextView mode =
+        TextView appearanceText =
                 new TextView(this);
 
-        mode.setText(
-                "المظهر\n\n" +
+        appearanceText.setText(
+                "🎨 المظهر\n\n" +
                         (
                                 darkMode
                                         ? "🌙 الوضع الداكن مفعل"
@@ -4061,28 +4696,120 @@ public class MainActivity extends android.app.Activity {
                         )
         );
 
-        mode.setTextColor(
+        appearanceText.setTextColor(
                 textColor
         );
 
-        mode.setTextSize(18);
+        appearanceText.setTextSize(18);
 
-        card.addView(mode);
+        appearance.addView(
+                appearanceText
+        );
 
-        root.addView(card);
+        root.addView(
+                appearance
+        );
 
-        Button toggle =
+        Button dark =
                 button(
                         darkMode
-                                ? "☀️ تفعيل الوضع الفاتح"
-                                : "🌙 تفعيل الوضع الداكن"
+                                ? "☀️ الوضع الفاتح"
+                                : "🌙 الوضع الداكن"
                 );
 
-        toggle.setOnClickListener(
+        dark.setOnClickListener(
                 v -> toggleDarkMode()
         );
 
-        root.addView(toggle);
+        root.addView(dark);
+
+        LinearLayout audio =
+                card();
+
+        TextView audioText =
+                new TextView(this);
+
+        audioText.setText(
+                "🎵 الصوت\n\n" +
+                        (
+                                musicEnabled
+                                        ? "🎵 الموسيقى مفعلة"
+                                        : "🔇 الموسيقى متوقفة"
+                        ) +
+                        "\n" +
+                        (
+                                soundEnabled
+                                        ? "🔊 المؤثرات مفعلة"
+                                        : "🔇 المؤثرات متوقفة"
+                        )
+        );
+
+        audioText.setTextColor(
+                textColor
+        );
+
+        audioText.setTextSize(18);
+
+        audio.addView(
+                audioText
+        );
+
+        root.addView(audio);
+
+        Button music =
+                button(
+                        musicEnabled
+                                ? "🔇 إيقاف الموسيقى"
+                                : "🎵 تشغيل الموسيقى"
+                );
+
+        music.setOnClickListener(
+                v -> toggleMusic()
+        );
+
+        root.addView(music);
+
+        Button sound =
+                button(
+                        soundEnabled
+                                ? "🔇 إيقاف المؤثرات"
+                                : "🔊 تشغيل المؤثرات"
+                );
+
+        sound.setOnClickListener(
+                v -> toggleSound()
+        );
+
+        root.addView(sound);
+
+        LinearLayout about =
+                card();
+
+        TextView aboutText =
+                new TextView(this);
+
+        aboutText.setText(
+                "🎮 GuessUs\n\n" +
+                        "لعبة توقع إجابات صاحبك.\n" +
+                        "👥 لاعبان\n" +
+                        "🎯 توقعات\n" +
+                        "🏆 نقاط\n" +
+                        "💬 Chat\n" +
+                        "🎵 موسيقى\n\n" +
+                        "الإصدار 1.0"
+        );
+
+        aboutText.setTextColor(
+                textColor
+        );
+
+        aboutText.setTextSize(16);
+
+        about.addView(
+                aboutText
+        );
+
+        root.addView(about);
 
         Button back =
                 button("رجوع");
@@ -4385,4 +5112,4 @@ public class MainActivity extends android.app.Activity {
             }
         }
     }
-}
+    }
