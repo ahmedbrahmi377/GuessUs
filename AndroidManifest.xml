@@ -6,7 +6,9 @@
     <application
         android:theme="@style/AppTheme"
         android:label="GuessUs"
-        android:icon="@drawable/ic_launcher">
+        android:icon="@drawable/ic_launcher"
+        android:allowBackup="true"
+        android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
