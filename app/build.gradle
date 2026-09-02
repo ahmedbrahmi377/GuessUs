@@ -12,6 +12,13 @@ android {
         targetSdk 35
         versionCode 1
         versionName "1.0"
+
+        buildConfigField "String", "SUPABASE_URL", "\"${SUPABASE_URL}\""
+        buildConfigField "String", "SUPABASE_KEY", "\"${SUPABASE_KEY}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     buildTypes {
