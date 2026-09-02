@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,6 +24,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Random;
+import java.util.UUID;
 
 public class MainActivity extends Activity {
 
@@ -32,6 +34,7 @@ public class MainActivity extends Activity {
     private String roomCode = "";
     private String roomId = "";
     private String playerName = "";
+    private String playerId = "";
 
     private int score = 0;
     private int round = 0;
@@ -39,13 +42,24 @@ public class MainActivity extends Activity {
 
     private boolean dark = false;
     private boolean isHost = false;
+
     private boolean answerSent = false;
     private boolean predictionSent = false;
+    private boolean nextReadySent = false;
 
     private Runnable syncRunnable;
     private Runnable timerRunnable;
 
     private int secondsLeft = 45;
+
+    private String currentScreen = "";
+
+    private String lastTarget = "";
+    private String lastPredicted = "";
+    private String lastActual = "";
+    private boolean lastCorrect = false;
+    private boolean lastExact = false;
+    private int lastPoints = 0;
 
     private final String[] questions = {
 
@@ -212,6 +226,7 @@ public class MainActivity extends Activity {
 
         bg.setColor(cardColor());
         bg.setCornerRadius(22);
+
         bg.setStroke(
                 2,
                 dark
@@ -260,6 +275,7 @@ public class MainActivity extends Activity {
                 new ScrollView(this);
 
         scroll.setFillViewport(true);
+
         scroll.addView(content);
 
         setContentView(scroll);
@@ -287,7 +303,13 @@ public class MainActivity extends Activity {
         ).show();
     }
 
+    // =========================================================
+    // HOME
+    // =========================================================
+
     private void home() {
+
+        currentScreen = "home";
 
         base();
 
@@ -362,7 +384,13 @@ public class MainActivity extends Activity {
         );
     }
 
+    // =========================================================
+    // CREATE ROOM
+    // =========================================================
+
     private void createScreen() {
+
+        currentScreen = "create";
 
         base();
 
@@ -401,6 +429,7 @@ public class MainActivity extends Activity {
             }
 
             playerName = n;
+            playerId = createPlayerId();
 
             createRoom();
         });
@@ -408,6 +437,12 @@ public class MainActivity extends Activity {
         back.setOnClickListener(
                 v -> home()
         );
+    }
+
+    private String createPlayerId() {
+
+        return UUID.randomUUID()
+                .toString();
     }
 
     private void createRoom() {
@@ -418,44 +453,20 @@ public class MainActivity extends Activity {
 
             try {
 
-                String code;
-
-                while (true) {
-
-                    code =
-                            String.valueOf(
-                                    1000 +
-                                    new Random()
-                                            .nextInt(9000)
-                            );
-
-                    String check =
-                            BuildConfig.SUPABASE_URL +
-                            "/rest/v1/rooms" +
-                            "?code=eq." +
-                            code +
-                            "&select=id";
-
-                    JSONArray existing =
-                            new JSONArray(
-                                    request(
-                                            "GET",
-                                            check,
-                                            null,
-                                            false
-                                    )
-                            );
-
-                    if (existing.length() == 0) {
-                        break;
-                    }
-                }
+                String code = findFreeRoomCode();
 
                 JSONObject room =
                         new JSONObject();
 
-                room.put("code", code);
-                room.put("status", "waiting");
+                room.put(
+                        "code",
+                        code
+                );
+
+                room.put(
+                        "status",
+                        "waiting"
+                );
 
                 String response =
                         request(
@@ -470,6 +481,7 @@ public class MainActivity extends Activity {
                         new JSONArray(response);
 
                 if (result.length() == 0) {
+
                     throw new Exception(
                             "لم يتم إنشاء الغرفة"
                     );
@@ -486,31 +498,7 @@ public class MainActivity extends Activity {
 
                 isHost = true;
 
-                JSONObject state =
-                        new JSONObject();
-
-                state.put(
-                        "room_code",
-                        roomCode
-                );
-
-                state.put(
-                        "question_index",
-                        0
-                );
-
-                state.put(
-                        "status",
-                        "waiting"
-                );
-
-                request(
-                        "POST",
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/game_state",
-                        state.toString(),
-                        false
-                );
+                createInitialGameState();
 
                 addPlayer();
 
@@ -531,7 +519,85 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private String findFreeRoomCode()
+            throws Exception {
+
+        for (int attempt = 0; attempt < 30; attempt++) {
+
+            String code =
+                    String.valueOf(
+                            1000 +
+                            new Random()
+                                    .nextInt(9000)
+                    );
+
+            String url =
+                    BuildConfig.SUPABASE_URL +
+                    "/rest/v1/rooms" +
+                    "?code=eq." +
+                    URLEncoder.encode(
+                            code,
+                            "UTF-8"
+                    ) +
+                    "&select=id";
+
+            JSONArray existing =
+                    new JSONArray(
+                            request(
+                                    "GET",
+                                    url,
+                                    null,
+                                    false
+                            )
+                    );
+
+            if (existing.length() == 0) {
+                return code;
+            }
+        }
+
+        throw new Exception(
+                "تعذر إيجاد كود غرفة"
+        );
+    }
+
+    private void createInitialGameState()
+            throws Exception {
+
+        JSONObject state =
+                new JSONObject();
+
+        state.put(
+                "room_code",
+                roomCode
+        );
+
+        state.put(
+                "question_index",
+                0
+        );
+
+        state.put(
+                "status",
+                "waiting"
+        );
+
+        request(
+                "POST",
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/game_state",
+                state.toString(),
+                false
+        );
+    }
+
+    // =========================================================
+    // JOIN ROOM
+    // =========================================================
+
     private void joinScreen() {
+
+        currentScreen = "join";
 
         base();
 
@@ -547,7 +613,9 @@ public class MainActivity extends Activity {
         EditText code =
                 input("كود الغرفة - 4 أرقام");
 
-        code.setInputType(2);
+        code.setInputType(
+                InputType.TYPE_CLASS_NUMBER
+        );
 
         content.addView(name);
         content.addView(code);
@@ -587,6 +655,7 @@ public class MainActivity extends Activity {
 
             playerName = n;
             roomCode = c;
+            playerId = createPlayerId();
 
             joinRoom();
         });
@@ -625,6 +694,7 @@ public class MainActivity extends Activity {
                         );
 
                 if (rooms.length() == 0) {
+
                     throw new Exception(
                             "الغرفة غير موجودة"
                     );
@@ -642,7 +712,8 @@ public class MainActivity extends Activity {
                                 "waiting"
                         );
 
-                if (status.equals("playing")) {
+                if (!status.equals("waiting")) {
+
                     throw new Exception(
                             "اللعبة بدأت بالفعل"
                     );
@@ -656,7 +727,7 @@ public class MainActivity extends Activity {
                                 roomCode,
                                 "UTF-8"
                         ) +
-                        "&select=id";
+                        "&select=id,name";
 
                 JSONArray players =
                         new JSONArray(
@@ -669,6 +740,7 @@ public class MainActivity extends Activity {
                         );
 
                 if (players.length() >= 6) {
+
                     throw new Exception(
                             "الغرفة ممتلئة"
                     );
@@ -695,6 +767,10 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // =========================================================
+    // PLAYER
+    // =========================================================
+
     private void addPlayer()
             throws Exception {
 
@@ -718,9 +794,7 @@ public class MainActivity extends Activity {
 
         player.put(
                 "player_id",
-                playerName +
-                "_" +
-                System.currentTimeMillis()
+                playerId
         );
 
         player.put(
@@ -747,7 +821,13 @@ public class MainActivity extends Activity {
         );
     }
 
+    // =========================================================
+    // LOBBY
+    // =========================================================
+
     private void lobby() {
+
+        currentScreen = "lobby";
 
         base();
 
@@ -783,8 +863,8 @@ public class MainActivity extends Activity {
         Button start =
                 button(
                         isHost
-                        ? "🚀 Start Game"
-                        : "⏳ بانتظار الـHost"
+                                ? "🚀 Start Game"
+                                : "⏳ بانتظار الـHost"
                 );
 
         Button chat =
@@ -801,7 +881,14 @@ public class MainActivity extends Activity {
         loadPlayers(playersView);
 
         startSync(
-                () -> loadPlayers(playersView)
+                () -> {
+
+                    loadPlayers(playersView);
+
+                    if (!isHost) {
+                        syncWaitingState();
+                    }
+                }
         );
 
         ready.setOnClickListener(
@@ -811,9 +898,11 @@ public class MainActivity extends Activity {
         start.setOnClickListener(v -> {
 
             if (!isHost) {
+
                 toast(
                         "فقط صاحب الغرفة يستطيع البدء"
                 );
+
                 return;
             }
 
@@ -859,14 +948,8 @@ public class MainActivity extends Activity {
                 StringBuilder result =
                         new StringBuilder();
 
-                result.append(
-                        "👥 Players "
-                );
-
-                result.append(
-                        players.length()
-                );
-
+                result.append("👥 Players ");
+                result.append(players.length());
                 result.append("/6\n\n");
 
                 for (
@@ -878,10 +961,7 @@ public class MainActivity extends Activity {
                     JSONObject p =
                             players.getJSONObject(i);
 
-                    result.append(
-                            i + 1
-                    );
-
+                    result.append(i + 1);
                     result.append(". ");
 
                     result.append(
@@ -889,13 +969,17 @@ public class MainActivity extends Activity {
                     );
 
                     if (
-                            p.optBoolean("is_host")
+                            p.optBoolean(
+                                    "is_host"
+                            )
                     ) {
                         result.append(" 👑");
                     }
 
                     if (
-                            p.optBoolean("ready")
+                            p.optBoolean(
+                                    "ready"
+                            )
                     ) {
                         result.append(" 🟢");
                     } else {
@@ -919,7 +1003,6 @@ public class MainActivity extends Activity {
                         )
                 );
             }
-
         }).start();
     }
 
@@ -932,14 +1015,14 @@ public class MainActivity extends Activity {
                 String url =
                         BuildConfig.SUPABASE_URL +
                         "/rest/v1/players" +
-                        "?room_code=eq." +
+                        "?player_id=eq." +
                         URLEncoder.encode(
-                                roomCode,
+                                playerId,
                                 "UTF-8"
                         ) +
-                        "&name=eq." +
+                        "&room_code=eq." +
                         URLEncoder.encode(
-                                playerName,
+                                roomCode,
                                 "UTF-8"
                         );
 
@@ -976,6 +1059,10 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // =========================================================
+    // START GAME
+    // =========================================================
+
     private void startGame() {
 
         new Thread(() -> {
@@ -1003,6 +1090,7 @@ public class MainActivity extends Activity {
                         );
 
                 if (players.length() < 2) {
+
                     throw new Exception(
                             "تحتاج لاعبين على الأقل"
                     );
@@ -1016,8 +1104,8 @@ public class MainActivity extends Activity {
 
                     if (
                             !players
-                            .getJSONObject(i)
-                            .optBoolean("ready")
+                                    .getJSONObject(i)
+                                    .optBoolean("ready")
                     ) {
 
                         throw new Exception(
@@ -1034,32 +1122,34 @@ public class MainActivity extends Activity {
                         "playing"
                 );
 
-                String roomUrl =
+                request(
+                        "PATCH",
                         BuildConfig.SUPABASE_URL +
                         "/rest/v1/rooms" +
                         "?code=eq." +
                         URLEncoder.encode(
                                 roomCode,
                                 "UTF-8"
-                        );
-
-                request(
-                        "PATCH",
-                        roomUrl,
+                        ),
                         roomData.toString(),
                         false
                 );
 
-                round = 0;
-                questionIndex = 0;
+                resetAllReady();
 
-                updateGameState(
+                setGameState(
                         0,
                         "answering"
                 );
 
                 runOnUiThread(
-                        () -> answerScreen()
+                        () -> {
+
+                            round = 0;
+                            questionIndex = 0;
+
+                            answerScreen();
+                        }
                 );
 
             } catch (Exception e) {
@@ -1074,7 +1164,13 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // =========================================================
+    // ANSWER
+    // =========================================================
+
     private void answerScreen() {
+
+        currentScreen = "answering";
 
         stopSync();
         stopTimer();
@@ -1086,7 +1182,7 @@ public class MainActivity extends Activity {
         content.addView(
                 title(
                         "❓ الجولة " +
-                        (round + 1)
+                        (questionIndex + 1)
                 )
         );
 
@@ -1126,7 +1222,10 @@ public class MainActivity extends Activity {
                         24
                 );
 
-        question.setGravity(Gravity.CENTER);
+        question.setGravity(
+                Gravity.CENTER
+        );
+
         question.setTypeface(
                 null,
                 Typeface.BOLD
@@ -1143,12 +1242,16 @@ public class MainActivity extends Activity {
                         17
                 );
 
-        help.setGravity(Gravity.CENTER);
+        help.setGravity(
+                Gravity.CENTER
+        );
 
         content.addView(help);
 
         EditText answer =
-                input("اكتب إجابتك هنا...");
+                input(
+                        "اكتب إجابتك هنا..."
+                );
 
         answer.setMinLines(3);
 
@@ -1166,9 +1269,11 @@ public class MainActivity extends Activity {
         send.setOnClickListener(v -> {
 
             if (answerSent) {
+
                 toast(
                         "أرسلت إجابتك بالفعل"
                 );
+
                 return;
             }
 
@@ -1178,9 +1283,11 @@ public class MainActivity extends Activity {
                             .trim();
 
             if (value.isEmpty()) {
+
                 toast(
                         "اكتب إجابة أولًا"
                 );
+
                 return;
             }
 
@@ -1193,14 +1300,12 @@ public class MainActivity extends Activity {
 
         startTimer(
                 timer,
-                send,
                 45
         );
     }
 
     private void startTimer(
             TextView timer,
-            Button send,
             int seconds
     ) {
 
@@ -1212,11 +1317,14 @@ public class MainActivity extends Activity {
                     @Override
                     public void run() {
 
-                        if (secondsLeft <= 0) {
+                        if (
+                                currentScreen
+                                        .equals("answering")
+                                &&
+                                secondsLeft <= 0
+                        ) {
 
                             if (!answerSent) {
-
-                                answerSent = true;
 
                                 sendAnswer(
                                         "لا توجد إجابة"
@@ -1257,9 +1365,13 @@ public class MainActivity extends Activity {
 
     private void sendAnswer(String answer) {
 
-        stopTimer();
+        if (answerSent) {
+            return;
+        }
 
         answerSent = true;
+
+        stopTimer();
 
         new Thread(() -> {
 
@@ -1338,7 +1450,13 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // =========================================================
+    // WAITING ANSWERS
+    // =========================================================
+
     private void waitingForAnswers() {
+
+        currentScreen = "waiting_answers";
 
         base();
 
@@ -1352,14 +1470,19 @@ public class MainActivity extends Activity {
                         20
                 );
 
-        wait.setGravity(Gravity.CENTER);
+        wait.setGravity(
+                Gravity.CENTER
+        );
 
         content.addView(wait);
 
         TextView count =
                 text("0 / 0", 24);
 
-        count.setGravity(Gravity.CENTER);
+        count.setGravity(
+                Gravity.CENTER
+        );
+
         count.setTypeface(
                 null,
                 Typeface.BOLD
@@ -1371,7 +1494,7 @@ public class MainActivity extends Activity {
 
         content.addView(
                 text(
-                        "🎯 بعد الإجابات ستنتقلون إلى مرحلة Predict.",
+                        "🎯 بعد إجابات الجميع ستبدأ مرحلة Predict.",
                         17
                 )
         );
@@ -1398,53 +1521,11 @@ public class MainActivity extends Activity {
 
             try {
 
-                String playersUrl =
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=name";
-
-                JSONArray players =
-                        new JSONArray(
-                                request(
-                                        "GET",
-                                        playersUrl,
-                                        null,
-                                        false
-                                )
-                        );
-
-                String answersUrl =
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/round_answers" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&round=eq." +
-                        round +
-                        "&select=player_name";
-
-                JSONArray answers =
-                        new JSONArray(
-                                request(
-                                        "GET",
-                                        answersUrl,
-                                        null,
-                                        false
-                                )
-                        );
-
                 int total =
-                        players.length();
+                        getPlayerCount();
 
                 int submitted =
-                        answers.length();
+                        getAnswerCount();
 
                 runOnUiThread(
                         () -> counter.setText(
@@ -1456,35 +1537,52 @@ public class MainActivity extends Activity {
                 );
 
                 if (
-                        total > 0 &&
+                        total >= 2 &&
                         submitted >= total
                 ) {
 
                     if (isHost) {
 
-                        updateGameState(
+                        setGameState(
                                 questionIndex,
                                 "predicting"
                         );
                     }
 
-                    runOnUiThread(
-                            () -> predictionScreen()
-                    );
+                    if (
+                            currentScreen
+                                    .equals(
+                                            "waiting_answers"
+                                    )
+                    ) {
+
+                        runOnUiThread(
+                                () -> predictionScreen()
+                        );
+                    }
                 }
 
             } catch (Exception ignored) {
+
+                syncGameState();
             }
 
         }).start();
     }
 
+    // =========================================================
+    // PREDICTION
+    // =========================================================
+
     private void predictionScreen() {
+
+        currentScreen = "predicting";
 
         stopSync();
         stopTimer();
 
         predictionSent = false;
+        nextReadySent = false;
 
         base();
 
@@ -1501,7 +1599,9 @@ public class MainActivity extends Activity {
                         18
                 );
 
-        info.setGravity(Gravity.CENTER);
+        info.setGravity(
+                Gravity.CENTER
+        );
 
         content.addView(info);
 
@@ -1562,10 +1662,12 @@ public class MainActivity extends Activity {
             }
 
             if (
-                    spinner.getSelectedItem() == null
+                    spinner.getSelectedItem()
+                            == null
             ) {
 
                 toast("اختار لاعبًا");
+
                 return;
             }
 
@@ -1583,6 +1685,7 @@ public class MainActivity extends Activity {
             if (predicted.isEmpty()) {
 
                 toast("اكتب توقعك");
+
                 return;
             }
 
@@ -1592,14 +1695,9 @@ public class MainActivity extends Activity {
             );
         });
 
-        skip.setOnClickListener(v -> {
-
-            if (!predictionSent) {
-                predictionSent = true;
-            }
-
-            nextRound();
-        });
+        skip.setOnClickListener(
+                v -> submitSkip()
+        );
 
         chat.setOnClickListener(
                 v -> chat()
@@ -1623,7 +1721,8 @@ public class MainActivity extends Activity {
                                 roomCode,
                                 "UTF-8"
                         ) +
-                        "&select=name";
+                        "&select=name" +
+                        "&order=joined_at.asc";
 
                 JSONArray players =
                         new JSONArray(
@@ -1635,6 +1734,10 @@ public class MainActivity extends Activity {
                                 )
                         );
 
+                runOnUiThread(
+                        () -> adapter.clear()
+                );
+
                 for (
                         int i = 0;
                         i < players.length();
@@ -1643,8 +1746,10 @@ public class MainActivity extends Activity {
 
                     String name =
                             players
-                            .getJSONObject(i)
-                            .optString("name");
+                                    .getJSONObject(i)
+                                    .optString(
+                                            "name"
+                                    );
 
                     if (
                             !name.equals(
@@ -1665,14 +1770,21 @@ public class MainActivity extends Activity {
 
             } catch (Exception ignored) {
             }
-
         }).start();
     }
+
+    // =========================================================
+    // SUBMIT PREDICTION
+    // =========================================================
 
     private void submitPrediction(
             String target,
             String predicted
     ) {
+
+        if (predictionSent) {
+            return;
+        }
 
         predictionSent = true;
 
@@ -1716,14 +1828,18 @@ public class MainActivity extends Activity {
 
                 String actual =
                         answers
-                        .getJSONObject(0)
-                        .optString("answer");
+                                .getJSONObject(0)
+                                .optString(
+                                        "answer"
+                                );
 
                 boolean exact =
-                        actual.trim()
-                        .equalsIgnoreCase(
-                                predicted.trim()
-                        );
+                        normalize(actual)
+                                .equals(
+                                        normalize(
+                                                predicted
+                                        )
+                                );
 
                 boolean correct =
                         exact ||
@@ -1742,69 +1858,26 @@ public class MainActivity extends Activity {
                     points += 2;
                 }
 
-                JSONObject prediction =
-                        new JSONObject();
-
-                prediction.put(
-                        "room_code",
-                        roomCode
-                );
-
-                prediction.put(
-                        "round",
-                        round
-                );
-
-                prediction.put(
-                        "predictor",
-                        playerName
-                );
-
-                prediction.put(
-                        "target",
-                        target
-                );
-
-                prediction.put(
-                        "predicted_answer",
-                        predicted
-                );
-
-                prediction.put(
-                        "correct",
-                        correct
-                );
-
-                prediction.put(
-                        "points",
+                savePrediction(
+                        target,
+                        predicted,
+                        correct,
                         points
-                );
-
-                request(
-                        "POST",
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/predictions",
-                        prediction.toString(),
-                        false
                 );
 
                 score += points;
 
                 updateScore();
 
-                final int earned = points;
-                final boolean right = correct;
-                final boolean bonus = exact;
+                lastTarget = target;
+                lastPredicted = predicted;
+                lastActual = actual;
+                lastCorrect = correct;
+                lastExact = exact;
+                lastPoints = points;
 
                 runOnUiThread(
-                        () -> predictionResult(
-                                target,
-                                predicted,
-                                actual,
-                                right,
-                                bonus,
-                                earned
-                        )
+                        () -> predictionResult()
                 );
 
             } catch (Exception e) {
@@ -1822,6 +1895,131 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void savePrediction(
+            String target,
+            String predicted,
+            boolean correct,
+            int points
+    ) throws Exception {
+
+        String delete =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/predictions" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&round=eq." +
+                round +
+                "&predictor=eq." +
+                URLEncoder.encode(
+                        playerName,
+                        "UTF-8"
+                );
+
+        request(
+                "DELETE",
+                delete,
+                null,
+                false
+        );
+
+        JSONObject prediction =
+                new JSONObject();
+
+        prediction.put(
+                "room_code",
+                roomCode
+        );
+
+        prediction.put(
+                "round",
+                round
+        );
+
+        prediction.put(
+                "predictor",
+                playerName
+        );
+
+        prediction.put(
+                "target",
+                target
+        );
+
+        prediction.put(
+                "predicted_answer",
+                predicted
+        );
+
+        prediction.put(
+                "correct",
+                correct
+        );
+
+        prediction.put(
+                "points",
+                points
+        );
+
+        request(
+                "POST",
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/predictions",
+                prediction.toString(),
+                false
+        );
+    }
+
+    private void submitSkip() {
+
+        if (predictionSent) {
+            return;
+        }
+
+        predictionSent = true;
+
+        new Thread(() -> {
+
+            try {
+
+                savePrediction(
+                        "",
+                        "SKIP",
+                        false,
+                        0
+                );
+
+                lastTarget = "";
+                lastPredicted = "⏭ Skip";
+                lastActual = "";
+                lastCorrect = false;
+                lastExact = false;
+                lastPoints = 0;
+
+                runOnUiThread(
+                        () -> predictionResult()
+                );
+
+            } catch (Exception e) {
+
+                predictionSent = false;
+
+                runOnUiThread(
+                        () -> toast(
+                                "تعذر تنفيذ Skip"
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    // =========================================================
+    // ANSWER MATCHING
+    // =========================================================
+
     private boolean similarAnswer(
             String a,
             String b
@@ -1837,88 +2035,134 @@ public class MainActivity extends Activity {
             return false;
         }
 
-        return x.equals(y)
-                || x.contains(y)
-                || y.contains(x);
+        if (x.equals(y)) {
+            return true;
+        }
+
+        /*
+         * منع الحالات التي تكون فيها إجابة قصيرة جدًا
+         * داخل إجابة طويلة من اعتبارها صحيحة بسهولة.
+         */
+        if (
+                x.length() >= 4 &&
+                y.length() >= 4
+        ) {
+
+            return x.contains(y)
+                    || y.contains(x);
+        }
+
+        return false;
     }
 
     private String normalize(
             String value
     ) {
 
+        if (value == null) {
+            return "";
+        }
+
         return value
                 .toLowerCase()
                 .replace(" ", "")
+                .replace("\n", "")
+                .replace("\r", "")
                 .replace("أ", "ا")
                 .replace("إ", "ا")
                 .replace("آ", "ا")
                 .replace("ة", "ه")
+                .replace("ى", "ي")
                 .trim();
     }
 
-    private void predictionResult(
-            String target,
-            String predicted,
-            String actual,
-            boolean correct,
-            boolean exact,
-            int points
-    ) {
+    // =========================================================
+    // PREDICTION RESULT
+    // =========================================================
+
+    private void predictionResult() {
+
+        currentScreen = "results";
+
+        stopSync();
+        stopTimer();
 
         base();
 
         content.addView(
                 title(
-                        correct
-                        ? "🎉 ممتاز!"
-                        : "❌ ليس هذه المرة"
+                        lastCorrect
+                                ? "🎉 ممتاز!"
+                                : "❌ ليس هذه المرة"
                 )
         );
 
         StringBuilder result =
                 new StringBuilder();
 
-        result.append(
-                "👤 اللاعب: "
-        );
-
-        result.append(target);
-
-        result.append(
-                "\n\n🎯 توقعك: "
-        );
-
-        result.append(predicted);
-
-        result.append(
-                "\n\n💬 إجابته: "
-        );
-
-        result.append(actual);
-
-        result.append("\n\n");
-
-        if (correct) {
+        if (
+                lastTarget != null &&
+                !lastTarget.isEmpty()
+        ) {
 
             result.append(
-                    "✅ توقعت إجابته!\n"
+                    "👤 اللاعب: "
             );
 
             result.append(
-                    "⭐ +3 نقاط"
+                    lastTarget
             );
 
-            if (exact) {
+            result.append(
+                    "\n\n🎯 توقعك: "
+            );
+
+            result.append(
+                    lastPredicted
+            );
+
+            result.append(
+                    "\n\n💬 إجابته: "
+            );
+
+            result.append(
+                    lastActual
+            );
+
+            result.append("\n\n");
+
+            if (lastCorrect) {
 
                 result.append(
-                        "\n✨ +2 Bonus للمطابقة الدقيقة"
+                        "✅ توقعت إجابته!\n"
+                );
+
+                result.append(
+                        "⭐ +3 نقاط"
+                );
+
+                if (lastExact) {
+
+                    result.append(
+                            "\n✨ +2 Bonus للمطابقة الدقيقة"
+                    );
+                }
+
+            } else {
+
+                result.append(
+                        "😅 حاول مرة أخرى في الجولة القادمة"
                 );
             }
 
         } else {
 
             result.append(
-                    "😅 حاول مرة أخرى في الجولة القادمة"
+                    "⏭ اخترت Skip\n\n"
+            );
+
+            result.append(
+                    "لم تحصل على نقاط في هذه الجولة."
             );
         }
 
@@ -1926,7 +2170,9 @@ public class MainActivity extends Activity {
                 "\n\n🏆 مجموعك: "
         );
 
-        result.append(score);
+        result.append(
+                score
+        );
 
         TextView resultView =
                 text(
@@ -1943,7 +2189,7 @@ public class MainActivity extends Activity {
         space();
 
         Button next =
-                button("➡ السؤال التالي");
+                button("➡ جاهز للجولة التالية");
 
         Button leaderboard =
                 button("🏆 الترتيب");
@@ -1956,7 +2202,7 @@ public class MainActivity extends Activity {
         content.addView(chat);
 
         next.setOnClickListener(
-                v -> nextRound()
+                v -> readyForNextRound()
         );
 
         leaderboard.setOnClickListener(
@@ -1966,7 +2212,15 @@ public class MainActivity extends Activity {
         chat.setOnClickListener(
                 v -> chat()
         );
+
+        startSync(
+                () -> checkResultState()
+        );
     }
+
+    // =========================================================
+    // SCORE
+    // =========================================================
 
     private void updateScore() {
 
@@ -1977,14 +2231,14 @@ public class MainActivity extends Activity {
                 String url =
                         BuildConfig.SUPABASE_URL +
                         "/rest/v1/players" +
-                        "?room_code=eq." +
+                        "?player_id=eq." +
                         URLEncoder.encode(
-                                roomCode,
+                                playerId,
                                 "UTF-8"
                         ) +
-                        "&name=eq." +
+                        "&room_code=eq." +
                         URLEncoder.encode(
-                                playerName,
+                                roomCode,
                                 "UTF-8"
                         );
 
@@ -2009,32 +2263,575 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void nextRound() {
+    // =========================================================
+    // NEXT ROUND
+    // =========================================================
 
-        round++;
-        questionIndex++;
+    private void readyForNextRound() {
 
-        if (
-                questionIndex >=
-                questions.length
-        ) {
-
-            leaderboard();
+        if (nextReadySent) {
             return;
         }
 
-        if (isHost) {
+        nextReadySent = true;
 
-            updateGameState(
-                    questionIndex,
-                    "answering"
+        new Thread(() -> {
+
+            try {
+
+                setPlayerReady(true);
+
+                runOnUiThread(
+                        () -> toast(
+                                "✅ بانتظار بقية اللاعبين..."
+                        )
+                );
+
+            } catch (Exception e) {
+
+                nextReadySent = false;
+
+                runOnUiThread(
+                        () -> toast(
+                                "تعذر التأكيد"
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    private void checkResultState() {
+
+        new Thread(() -> {
+
+            try {
+
+                JSONObject state =
+                        getGameState();
+
+                String status =
+                        state.optString(
+                                "status",
+                                ""
+                        );
+
+                int index =
+                        state.optInt(
+                                "question_index",
+                                questionIndex
+                        );
+
+                if (
+                        status.equals("finished")
+                ) {
+
+                    runOnUiThread(
+                            () -> leaderboard()
+                    );
+
+                    return;
+                }
+
+                if (
+                        status.equals("answering") &&
+                        index != questionIndex
+                ) {
+
+                    questionIndex = index;
+                    round = index;
+
+                    answerSent = false;
+                    predictionSent = false;
+                    nextReadySent = false;
+
+                    runOnUiThread(
+                            () -> answerScreen()
+                    );
+
+                    return;
+                }
+
+                if (
+                        isHost &&
+                        status.equals("results")
+                ) {
+
+                    advanceWhenEveryoneReady();
+                }
+
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
+    private void advanceWhenEveryoneReady() {
+
+        try {
+
+            int total =
+                    getPlayerCount();
+
+            int ready =
+                    getReadyCount();
+
+            int predictions =
+                    getPredictionCount();
+
+            if (
+                    total >= 2 &&
+                    ready >= total &&
+                    predictions >= total
+            ) {
+
+                if (
+                        questionIndex + 1
+                                >= questions.length
+                ) {
+
+                    resetAllReady();
+
+                    setGameState(
+                            questionIndex,
+                            "finished"
+                    );
+
+                    runOnUiThread(
+                            () -> leaderboard()
+                    );
+
+                } else {
+
+                    int nextIndex =
+                            questionIndex + 1;
+
+                    resetAllReady();
+
+                    setGameState(
+                            nextIndex,
+                            "answering"
+                    );
+
+                    runOnUiThread(() -> {
+
+                        questionIndex =
+                                nextIndex;
+
+                        round =
+                                nextIndex;
+
+                        answerSent = false;
+                        predictionSent = false;
+                        nextReadySent = false;
+
+                        answerScreen();
+                    });
+                }
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // GAME STATE
+    // =========================================================
+
+    private void setGameState(
+            int index,
+            String status
+    ) throws Exception {
+
+        String find =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/game_state" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&select=room_code";
+
+        JSONArray rows =
+                new JSONArray(
+                        request(
+                                "GET",
+                                find,
+                                null,
+                                false
+                        )
+                );
+
+        JSONObject data =
+                new JSONObject();
+
+        data.put(
+                "question_index",
+                index
+        );
+
+        data.put(
+                "status",
+                status
+        );
+
+        if (rows.length() > 0) {
+
+            request(
+                    "PATCH",
+                    BuildConfig.SUPABASE_URL +
+                    "/rest/v1/game_state" +
+                    "?room_code=eq." +
+                    URLEncoder.encode(
+                            roomCode,
+                            "UTF-8"
+                    ),
+                    data.toString(),
+                    false
+            );
+
+        } else {
+
+            data.put(
+                    "room_code",
+                    roomCode
+            );
+
+            request(
+                    "POST",
+                    BuildConfig.SUPABASE_URL +
+                    "/rest/v1/game_state",
+                    data.toString(),
+                    false
+            );
+        }
+    }
+
+    private JSONObject getGameState()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/game_state" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&select=room_code,question_index,status";
+
+        JSONArray rows =
+                new JSONArray(
+                        request(
+                                "GET",
+                                url,
+                                null,
+                                false
+                        )
+                );
+
+        if (rows.length() == 0) {
+
+            throw new Exception(
+                    "Game state not found"
             );
         }
 
-        answerScreen();
+        return rows.getJSONObject(0);
     }
 
+    private void syncWaitingState() {
+
+        new Thread(() -> {
+
+            try {
+
+                JSONObject state =
+                        getGameState();
+
+                String status =
+                        state.optString(
+                                "status",
+                                ""
+                        );
+
+                int index =
+                        state.optInt(
+                                "question_index",
+                                0
+                        );
+
+                if (
+                        status.equals(
+                                "answering"
+                        ) &&
+                        currentScreen.equals(
+                                "lobby"
+                        )
+                ) {
+
+                    questionIndex = index;
+                    round = index;
+
+                    runOnUiThread(
+                            () -> answerScreen()
+                    );
+                }
+
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
+    private void syncGameState() {
+
+        new Thread(() -> {
+
+            try {
+
+                JSONObject state =
+                        getGameState();
+
+                String status =
+                        state.optString(
+                                "status",
+                                ""
+                        );
+
+                int index =
+                        state.optInt(
+                                "question_index",
+                                questionIndex
+                        );
+
+                if (
+                        status.equals("predicting") &&
+                        (
+                                currentScreen.equals(
+                                        "waiting_answers"
+                                ) ||
+                                currentScreen.equals(
+                                        "answering"
+                                )
+                        )
+                ) {
+
+                    runOnUiThread(
+                            () -> predictionScreen()
+                    );
+
+                } else if (
+                        status.equals("answering") &&
+                        index != questionIndex
+                ) {
+
+                    questionIndex = index;
+                    round = index;
+
+                    runOnUiThread(
+                            () -> answerScreen()
+                    );
+
+                } else if (
+                        status.equals("finished")
+                ) {
+
+                    runOnUiThread(
+                            () -> leaderboard()
+                    );
+                }
+
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
+    // =========================================================
+    // DATABASE COUNTERS
+    // =========================================================
+
+    private int getPlayerCount()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/players" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&select=id";
+
+        JSONArray rows =
+                new JSONArray(
+                        request(
+                                "GET",
+                                url,
+                                null,
+                                false
+                        )
+                );
+
+        return rows.length();
+    }
+
+    private int getAnswerCount()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/round_answers" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&round=eq." +
+                round +
+                "&select=player_name";
+
+        JSONArray rows =
+                new JSONArray(
+                        request(
+                                "GET",
+                                url,
+                                null,
+                                false
+                        )
+                );
+
+        return rows.length();
+    }
+
+    private int getPredictionCount()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/predictions" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&round=eq." +
+                round +
+                "&select=predictor";
+
+        JSONArray rows =
+                new JSONArray(
+                        request(
+                                "GET",
+                                url,
+                                null,
+                                false
+                        )
+                );
+
+        return rows.length();
+    }
+
+    private int getReadyCount()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/players" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                ) +
+                "&ready=eq.true" +
+                "&select=id";
+
+        JSONArray rows =
+                new JSONArray(
+                        request(
+                                "GET",
+                                url,
+                                null,
+                                false
+                        )
+                );
+
+        return rows.length();
+    }
+
+    // =========================================================
+    // READY / RESET
+    // =========================================================
+
+    private void setPlayerReady(
+            boolean ready
+    ) throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/players" +
+                "?player_id=eq." +
+                URLEncoder.encode(
+                        playerId,
+                        "UTF-8"
+                ) +
+                "&room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                );
+
+        JSONObject data =
+                new JSONObject();
+
+        data.put(
+                "ready",
+                ready
+        );
+
+        request(
+                "PATCH",
+                url,
+                data.toString(),
+                false
+        );
+    }
+
+    private void resetAllReady()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/players" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                );
+
+        JSONObject data =
+                new JSONObject();
+
+        data.put(
+                "ready",
+                false
+        );
+
+        request(
+                "PATCH",
+                url,
+                data.toString(),
+                false
+        );
+    }
+
+    // =========================================================
+    // LEADERBOARD
+    // =========================================================
+
     private void leaderboard() {
+
+        currentScreen = "leaderboard";
 
         base();
 
@@ -2067,24 +2864,9 @@ public class MainActivity extends Activity {
         content.addView(again);
         content.addView(room);
 
-        again.setOnClickListener(v -> {
-
-            round = 0;
-            questionIndex = 0;
-            score = 0;
-
-            resetScores();
-
-            if (isHost) {
-
-                updateGameState(
-                        0,
-                        "answering"
-                );
-            }
-
-            answerScreen();
-        });
+        again.setOnClickListener(
+                v -> playAgain()
+        );
 
         room.setOnClickListener(
                 v -> lobby()
@@ -2146,13 +2928,17 @@ public class MainActivity extends Activity {
 
                     result.append(medal);
                     result.append(" ");
+
                     result.append(
                             p.optString("name")
                     );
+
                     result.append(" — ");
+
                     result.append(
                             p.optInt("score")
                     );
+
                     result.append(
                             " نقطة\n\n"
                     );
@@ -2176,48 +2962,266 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void resetScores() {
+    // =========================================================
+    // PLAY AGAIN
+    // =========================================================
+
+    private void playAgain() {
+
+        if (!isHost) {
+
+            toast(
+                    "الـHost فقط يبدأ لعبة جديدة"
+            );
+
+            return;
+        }
 
         new Thread(() -> {
 
             try {
 
-                String url =
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/players" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        );
+                resetScores();
 
-                JSONObject data =
-                        new JSONObject();
+                deleteRoundData();
 
-                data.put(
-                        "score",
-                        0
+                resetAllReady();
+
+                setGameState(
+                        0,
+                        "waiting_restart"
                 );
 
-                data.put(
-                        "ready",
-                        false
+                runOnUiThread(
+                        () -> waitForRestartReady()
                 );
 
-                request(
-                        "PATCH",
-                        url,
-                        data.toString(),
-                        false
-                );
+            } catch (Exception e) {
 
-            } catch (Exception ignored) {
+                runOnUiThread(
+                        () -> toast(
+                                "تعذر إعادة اللعبة"
+                        )
+                );
             }
 
         }).start();
     }
 
+    private void waitForRestartReady() {
+
+        currentScreen = "restart_waiting";
+
+        base();
+
+        content.addView(
+                title("🔄 لعبة جديدة")
+        );
+
+        TextView info =
+                text(
+                        "تم تصفير النقاط.\n" +
+                        "اضغط Ready عندما تكون مستعدًا.",
+                        19
+                );
+
+        info.setGravity(
+                Gravity.CENTER
+        );
+
+        content.addView(info);
+
+        Button ready =
+                button("🟢 Ready");
+
+        Button room =
+                button("🏠 Back to Room");
+
+        content.addView(ready);
+        content.addView(room);
+
+        ready.setOnClickListener(
+                v -> restartReady()
+        );
+
+        room.setOnClickListener(
+                v -> lobby()
+        );
+
+        startSync(
+                () -> checkRestartReady()
+        );
+    }
+
+    private void restartReady() {
+
+        new Thread(() -> {
+
+            try {
+
+                setPlayerReady(true);
+
+                runOnUiThread(
+                        () -> toast(
+                                "🟢 Ready!"
+                        )
+                );
+
+            } catch (Exception e) {
+
+                runOnUiThread(
+                        () -> toast(
+                                "فشل Ready"
+                        )
+                );
+            }
+
+        }).start();
+    }
+
+    private void checkRestartReady() {
+
+        new Thread(() -> {
+
+            try {
+
+                int total =
+                        getPlayerCount();
+
+                int ready =
+                        getReadyCount();
+
+                if (
+                        isHost &&
+                        total >= 2 &&
+                        ready >= total
+                ) {
+
+                    resetAllReady();
+
+                    JSONObject roomData =
+                            new JSONObject();
+
+                    roomData.put(
+                            "status",
+                            "playing"
+                    );
+
+                    request(
+                            "PATCH",
+                            BuildConfig.SUPABASE_URL +
+                            "/rest/v1/rooms" +
+                            "?code=eq." +
+                            URLEncoder.encode(
+                                    roomCode,
+                                    "UTF-8"
+                            ),
+                            roomData.toString(),
+                            false
+                    );
+
+                    setGameState(
+                            0,
+                            "answering"
+                    );
+
+                    runOnUiThread(() -> {
+
+                        score = 0;
+                        round = 0;
+                        questionIndex = 0;
+
+                        answerSent = false;
+                        predictionSent = false;
+                        nextReadySent = false;
+
+                        answerScreen();
+                    });
+                }
+
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
+    private void resetScores()
+            throws Exception {
+
+        String url =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/players" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                );
+
+        JSONObject data =
+                new JSONObject();
+
+        data.put(
+                "score",
+                0
+        );
+
+        data.put(
+                "ready",
+                false
+        );
+
+        request(
+                "PATCH",
+                url,
+                data.toString(),
+                false
+        );
+
+        score = 0;
+    }
+
+    private void deleteRoundData()
+            throws Exception {
+
+        String answers =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/round_answers" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                );
+
+        request(
+                "DELETE",
+                answers,
+                null,
+                false
+        );
+
+        String predictions =
+                BuildConfig.SUPABASE_URL +
+                "/rest/v1/predictions" +
+                "?room_code=eq." +
+                URLEncoder.encode(
+                        roomCode,
+                        "UTF-8"
+                );
+
+        request(
+                "DELETE",
+                predictions,
+                null,
+                false
+        );
+    }
+
+    // =========================================================
+    // CHAT
+    // =========================================================
+
     private void chat() {
+
+        currentScreen = "chat";
 
         base();
 
@@ -2363,6 +3367,7 @@ public class MainActivity extends Activity {
                             messages.getJSONObject(i);
 
                     output.append("👤 ");
+
                     output.append(
                             m.optString(
                                     "player_name"
@@ -2400,7 +3405,13 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // =========================================================
+    // SETTINGS
+    // =========================================================
+
     private void settings() {
+
+        currentScreen = "settings";
 
         base();
 
@@ -2427,7 +3438,9 @@ public class MainActivity extends Activity {
                 dark
         );
 
-        content.addView(darkSwitch);
+        content.addView(
+                darkSwitch
+        );
 
         space();
 
@@ -2464,6 +3477,10 @@ public class MainActivity extends Activity {
         );
     }
 
+    // =========================================================
+    // LEAVE ROOM
+    // =========================================================
+
     private void leaveRoom() {
 
         stopSync();
@@ -2476,14 +3493,14 @@ public class MainActivity extends Activity {
                 String url =
                         BuildConfig.SUPABASE_URL +
                         "/rest/v1/players" +
-                        "?room_code=eq." +
+                        "?player_id=eq." +
                         URLEncoder.encode(
-                                roomCode,
+                                playerId,
                                 "UTF-8"
                         ) +
-                        "&name=eq." +
+                        "&room_code=eq." +
                         URLEncoder.encode(
-                                playerName,
+                                roomCode,
                                 "UTF-8"
                         );
 
@@ -2502,6 +3519,7 @@ public class MainActivity extends Activity {
                 roomCode = "";
                 roomId = "";
                 playerName = "";
+                playerId = "";
 
                 score = 0;
                 round = 0;
@@ -2515,84 +3533,9 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void updateGameState(
-            int index,
-            String status
-    ) {
-
-        new Thread(() -> {
-
-            try {
-
-                String find =
-                        BuildConfig.SUPABASE_URL +
-                        "/rest/v1/game_state" +
-                        "?room_code=eq." +
-                        URLEncoder.encode(
-                                roomCode,
-                                "UTF-8"
-                        ) +
-                        "&select=room_code";
-
-                JSONArray rows =
-                        new JSONArray(
-                                request(
-                                        "GET",
-                                        find,
-                                        null,
-                                        false
-                                )
-                        );
-
-                JSONObject data =
-                        new JSONObject();
-
-                data.put(
-                        "question_index",
-                        index
-                );
-
-                data.put(
-                        "status",
-                        status
-                );
-
-                if (rows.length() > 0) {
-
-                    request(
-                            "PATCH",
-                            BuildConfig.SUPABASE_URL +
-                            "/rest/v1/game_state" +
-                            "?room_code=eq." +
-                            URLEncoder.encode(
-                                    roomCode,
-                                    "UTF-8"
-                            ),
-                            data.toString(),
-                            false
-                    );
-
-                } else {
-
-                    data.put(
-                            "room_code",
-                            roomCode
-                    );
-
-                    request(
-                            "POST",
-                            BuildConfig.SUPABASE_URL +
-                            "/rest/v1/game_state",
-                            data.toString(),
-                            false
-                    );
-                }
-
-            } catch (Exception ignored) {
-            }
-
-        }).start();
-    }
+    // =========================================================
+    // SYNC
+    // =========================================================
 
     private void startSync(
             Runnable action
@@ -2606,12 +3549,17 @@ public class MainActivity extends Activity {
                     @Override
                     public void run() {
 
-                        action.run();
+                        if (
+                                !isFinishing()
+                        ) {
 
-                        handler.postDelayed(
-                                this,
-                                2000
-                        );
+                            action.run();
+
+                            handler.postDelayed(
+                                    this,
+                                    2000
+                            );
+                        }
                     }
                 };
 
@@ -2629,6 +3577,10 @@ public class MainActivity extends Activity {
             syncRunnable = null;
         }
     }
+
+    // =========================================================
+    // HTTP / SUPABASE
+    // =========================================================
 
     private String request(
             String method,
@@ -2680,8 +3632,8 @@ public class MainActivity extends Activity {
         connection.setRequestProperty(
                 "Prefer",
                 returnRepresentation
-                ? "return=representation"
-                : "return=minimal"
+                        ? "return=representation"
+                        : "return=minimal"
         );
 
         if (body != null) {
@@ -2764,4 +3716,4 @@ public class MainActivity extends Activity {
 
         return result.toString();
     }
-    }
+}
