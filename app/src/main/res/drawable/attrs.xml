@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom theme attributes for dynamic backgrounds -->
+    <attr name="bgPrimary" format="color" />
+    <attr name="bgSecondary" format="color" />
+    <attr name="textPrimary" format="color" />
+    <attr name="textSecondary" format="color" />
+    <attr name="accentColor" format="color" />
+</resources>
