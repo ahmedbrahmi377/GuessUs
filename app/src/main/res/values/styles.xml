@@ -1,39 +1,163 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="AppTheme"
-        parent="android:style/Theme.Material.Light.NoActionBar">
-
+    <!-- Main App Theme -->
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <!-- General -->
-        <item name="android:fontFamily">sans</item>
+        <item name="android:fontFamily">sans-serif</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
 
-        <!-- GuessUs primary color -->
-        <item name="android:colorAccent">#6A55DC</item>
+        <!-- Colors -->
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="android:colorPrimary">@color/primary</item>
+        <item name="android:colorPrimaryDark">@color/primary_dark</item>
 
         <!-- Background -->
-        <item name="android:windowBackground">#F7F8FC</item>
+        <item name="android:windowBackground">@color/bg_light</item>
 
-        <!-- Status bar -->
-        <item name="android:statusBarColor">#F7F8FC</item>
+        <!-- Status Bar -->
+        <item name="android:statusBarColor">@color/bg_light</item>
         <item name="android:windowLightStatusBar">true</item>
 
-        <!-- Navigation bar -->
-        <item name="android:navigationBarColor">#F7F8FC</item>
+        <!-- Navigation Bar -->
+        <item name="android:navigationBarColor">@color/bg_light</item>
         <item name="android:windowLightNavigationBar">true</item>
 
-        <!-- Window -->
-        <item name="android:windowNoTitle">true</item>
+        <!-- Window Properties -->
         <item name="android:windowDisablePreview">true</item>
         <item name="android:windowIsTranslucent">false</item>
-
-        <!-- Prevent unwanted overscroll glow -->
         <item name="android:windowContentTransitions">false</item>
-
-        <!-- Better text rendering -->
         <item name="android:windowEnableSplitTouch">true</item>
+        <item name="android:windowActionBarOverlay">false</item>
 
+        <!-- Text Appearance -->
+        <item name="android:textColorPrimary">@color/text_light_primary</item>
+        <item name="android:textColorSecondary">@color/text_light_secondary</item>
+
+        <!-- EditText -->
+        <item name="android:editTextStyle">@style/EditTextStyle</item>
+
+        <!-- Button -->
+        <item name="android:buttonStyle">@style/ButtonStyle</item>
+
+        <!-- TextView -->
+        <item name="android:textViewStyle">@style/TextViewStyle</item>
+    </style>
+
+    <!-- Dark Theme Variant -->
+    <style name="AppTheme.Dark" parent="android:style/Theme.Material">
+        <item name="android:windowBackground">@color/bg_dark</item>
+        <item name="android:statusBarColor">@color/bg_dark</item>
+        <item name="android:navigationBarColor">@color/bg_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:textColorPrimary">@color/text_dark_primary</item>
+        <item name="android:textColorSecondary">@color/text_dark_secondary</item>
+    </style>
+
+    <!-- EditText Style -->
+    <style name="EditTextStyle" parent="android:Widget.EditText">
+        <item name="android:textColor">@color/text_light_primary</item>
+        <item name="android:textColorHint">@color/text_light_tertiary</item>
+        <item name="android:textSize">@dimen/text_size_base</item>
+        <item name="android:padding">@dimen/spacing_lg</item>
+        <item name="android:textCursorDrawable">@null</item>
+    </style>
+
+    <!-- Button Style -->
+    <style name="ButtonStyle" parent="android:Widget.Button">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">@dimen/text_size_base</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingTop">@dimen/spacing_lg</item>
+        <item name="android:paddingBottom">@dimen/spacing_lg</item>
+        <item name="android:minHeight">@dimen/button_height</item>
+    </style>
+
+    <!-- TextView Style -->
+    <style name="TextViewStyle" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/text_light_primary</item>
+        <item name="android:textSize">@dimen/text_size_base</item>
+    </style>
+
+    <!-- Title Style -->
+    <style name="TitleStyle" parent="TextViewStyle">
+        <item name="android:textSize">@dimen/text_size_5xl</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">@dimen/spacing_lg</item>
+        <item name="android:paddingBottom">@dimen/spacing_xl</item>
+    </style>
+
+    <!-- Subtitle Style -->
+    <style name="SubtitleStyle" parent="TextViewStyle">
+        <item name="android:textSize">@dimen/text_size_sm</item>
+        <item name="android:textColor">@color/text_light_secondary</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">@dimen/spacing_sm</item>
+        <item name="android:paddingBottom">@dimen/spacing_md</item>
+    </style>
+
+    <!-- Label Style -->
+    <style name="LabelStyle" parent="TextViewStyle">
+        <item name="android:textSize">@dimen/text_size_lg</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:padding">@dimen/spacing_sm</item>
+    </style>
+
+    <!-- Card Style -->
+    <style name="CardStyle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/card_margin</item>
+        <item name="android:layout_marginBottom">@dimen/card_margin</item>
+        <item name="android:padding">@dimen/card_padding</item>
+    </style>
+
+    <!-- Button Primary Style -->
+    <style name="ButtonPrimaryStyle" parent="ButtonStyle">
+        <item name="android:textSize">@dimen/text_size_base</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:minHeight">@dimen/button_height</item>
+        <item name="android:layout_marginTop">@dimen/button_margin</item>
+        <item name="android:layout_marginBottom">@dimen/button_margin</item>
+    </style>
+
+    <!-- Button Secondary Style -->
+    <style name="ButtonSecondaryStyle" parent="ButtonStyle">
+        <item name="android:textColor">@color/primary</item>
+        <item name="android:minHeight">@dimen/button_height_small</item>
+    </style>
+
+    <!-- Input Style -->
+    <style name="InputStyle" parent="EditTextStyle">
+        <item name="android:textSize">@dimen/text_size_base</item>
+        <item name="android:minHeight">@dimen/input_height</item>
+        <item name="android:layout_marginTop">@dimen/button_margin</item>
+        <item name="android:layout_marginBottom">@dimen/button_margin</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:inputType">text</item>
+    </style>
+
+    <!-- Progress Bar Style -->
+    <style name="ProgressBarStyle" parent="android:Widget.ProgressBar.Horizontal">
+        <item name="android:layout_height">@dimen/progress_bar_height</item>
+        <item name="android:layout_width">match_parent</item>
+    </style>
+
+    <!-- Dialog Style -->
+    <style name="DialogStyle" parent="android:Theme.Material.Light.Dialog">
+        <item name="android:windowBackground">@color/bg_light_secondary</item>
+        <item name="android:textColorPrimary">@color/text_light_primary</item>
+        <item name="android:textColorSecondary">@color/text_light_secondary</item>
+    </style>
+
+    <!-- Animation Styles -->
+    <style name="FadeInAnimation">
+        <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:windowExitAnimation">@android:anim/fade_out</item>
     </style>
 
 </resources>
