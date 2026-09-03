@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Primary gradient - more energetic -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="45"
+                android:startColor="#F5F0FF"
+                android:centerColor="#E8DCFF"
+                android:endColor="#D9CCFF" />
+        </shape>
+    </item>
+
+    <!-- Top left accent -->
+    <item
+        android:top="0dp"
+        android:left="0dp">
+        <shape android:shape="oval">
+            <solid android:color="#6A55DC" />
+            <size android:width="150dp" android:height="150dp" />
+        </shape>
+    </item>
+
+    <!-- Bottom right accent -->
+    <item
+        android:bottom="0dp"
+        android:right="0dp">
+        <shape android:shape="oval">
+            <solid android:color="#8B77E8" />
+            <size android:width="200dp" android:height="200dp" />
+        </shape>
+    </item>
+
+    <!-- Center decorative shape -->
+    <item
+        android:top="45%"
+        android:left="35%">
+        <shape android:shape="rectangle">
+            <solid android:color="#C3BBD7" />
+            <corners android:radius="50dp" />
+            <size android:width="80dp" android:height="80dp" />
+        </shape>
+    </item>
+
+    <!-- Subtle pattern dots -->
+    <item
+        android:top="20%"
+        android:right="15%">
+        <shape android:shape="oval">
+            <solid android:color="#E8DCFF" />
+            <size android:width="30dp" android:height="30dp" />
+        </shape>
+    </item>
+
+    <item
+        android:bottom="30%"
+        android:left="10%">
+        <shape android:shape="oval">
+            <solid android:color="#F0E6FF" />
+            <size android:width="45dp" android:height="45dp" />
+        </shape>
+    </item>
+</layer-list>
