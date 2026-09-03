@@ -15,21 +15,40 @@ android {
 
         buildConfigField "String", "SUPABASE_URL", "\"${SUPABASE_URL}\""
         buildConfigField "String", "SUPABASE_KEY", "\"${SUPABASE_KEY}\""
+
+        vectorDrawables.useSupportLibrary = true
+        multiDexEnabled = true
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
     }
 
     buildFeatures {
         buildConfig true
+        aidl false
+        renderScript false
+        resValues false
+        shaders false
     }
 
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
-                    'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
         }
 
         debug {
             minifyEnabled false
+            debuggable true
+            signingConfig signingConfigs.debug
         }
     }
 
@@ -37,10 +56,36 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    packagingOptions {
+        exclude 'META-INF/proguard/androidx-*.pro'
+        exclude 'META-INF/gradle/incremental.annotation.processors'
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+        warningsAsErrors false
+    }
 }
 
 dependencies {
+    // Core Android
     implementation 'androidx.appcompat:appcompat:1.7.1'
-    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.core:core:1.14.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+
+    // Material Design
+    implementation 'com.google.android.material:material:1.13.0'
+
+    // JSON Parsing (already in project)
+    // org.json is built-in
+
+    // Optional: For better networking (future enhancement)
+    // implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 }
