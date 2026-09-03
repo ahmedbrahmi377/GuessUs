@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -10,7 +9,8 @@
         android:resizeableActivity="true"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:requestLegacyExternalStorage="false">
 
         <activity
             android:name=".MainActivity"
