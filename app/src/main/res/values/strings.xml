@@ -1,4 +1,186 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- App -->
     <string name="app_name">GuessUs</string>
+    <string name="app_version">v1.0</string>
+    <string name="app_tagline">توقّع إجابات صاحبك وشوف شكون يعرف شكون أكثر 🎯</string>
+
+    <!-- Home Screen -->
+    <string name="home_title">GuessUs</string>
+    <string name="home_subtitle">توقّع إجابات صاحبك وشوف شكون يعرف شكون أكثر 🎯</string>
+    <string name="home_create_room">🎮 إنشاء غرفة</string>
+    <string name="home_join_room">🚪 الانضمام لغرفة</string>
+    <string name="home_settings">⚙️ الإعدادات</string>
+    <string name="home_features">👥 لاعبان • 🎯 توقع • 💬 Chat • 🏆 نقاط • 🎵 موسيقى</string>
+    <string name="home_version">GuessUs • Online Party Game</string>
+
+    <!-- Create Room -->
+    <string name="create_title">إنشاء غرفة 🎮</string>
+    <string name="create_subtitle">أنت الـHost. ادخل اسمك ثم شارك الكود مع صاحبك.</string>
+    <string name="create_name_hint">اسمك</string>
+    <string name="create_button">✨ إنشاء الغرفة</string>
+    <string name="create_creating">⏳ جاري الإنشاء...</string>
+    <string name="create_error_name">اكتب اسمك أولاً</string>
+    <string name="create_error_invalid">اسم اللاعب غير صالح</string>
+    <string name="create_error_failed">فشل إنشاء الغرفة</string>
+    <string name="create_error_supabase">Supabase لم يرجع الغرفة</string>
+
+    <!-- Join Room -->
+    <string name="join_title">الانضمام 🚪</string>
+    <string name="join_subtitle">ادخل اسمك وكود الغرفة المكوّن من 4 أرقام.</string>
+    <string name="join_name_hint">اسمك</string>
+    <string name="join_code_hint">كود الغرفة - 4 أرقام</string>
+    <string name="join_button">🚀 انضمام</string>
+    <string name="join_joining">⏳ جاري الانضمام...</string>
+    <string name="join_error_name">اكتب اسمك</string>
+    <string name="join_error_code">الكود لازم يكون 4 أرقام</string>
+    <string name="join_error_invalid_code">كود الغرفة غير صالح</string>
+    <string name="join_error_not_found">الغرفة غير موجودة</string>
+    <string name="join_error_started">اللعبة بدأت بالفعل</string>
+    <string name="join_error_full">الغرفة ممتلئة</string>
+    <string name="join_error_duplicate_name">الاسم مستعمل في الغرفة</string>
+    <string name="join_error_failed">تعذر الانضمام</string>
+
+    <!-- Lobby -->
+    <string name="lobby_title">🎮 Lobby</string>
+    <string name="lobby_room_code">كود الغرفة\n%s</string>
+    <string name="lobby_copy_code">📋 نسخ الكود</string>
+    <string name="lobby_share_code">📤 مشاركة الكود</string>
+    <string name="lobby_players_header">اللاعبين (%d/%d)</string>
+    <string name="lobby_player_host">👑 %s   %s</string>
+    <string name="lobby_player_normal">👤 %s   %s</string>
+    <string name="lobby_status_ready">✓ Ready</string>
+    <string name="lobby_status_waiting">• Waiting</string>
+    <string name="lobby_ready_button">✅ Ready</string>
+    <string name="lobby_ready_done">✓ أنت Ready</string>
+    <string name="lobby_start_button">🚀 بدء اللعبة</string>
+    <string name="lobby_starting">⏳ جاري البدء...</string>
+    <string name="lobby_chat">💬 Chat</string>
+    <string name="lobby_leave">🚪 مغادرة الغرفة</string>
+    <string name="lobby_copy_success">تم نسخ كود الغرفة 📋</string>
+    <string name="lobby_share_chooser">مشاركة كود GuessUs</string>
+    <string name="lobby_share_text">🎮 تعال نلعب GuessUs!\nكود الغرفة: %s</string>
+    <string name="lobby_error_ready">تعذر تسجيل Ready</string>
+    <string name="lobby_error_start_count">يلزم لاعبان بالضبط</string>
+    <string name="lobby_error_start_ready">لازم الاثنين يعملوا Ready</string>
+    <string name="lobby_error_start">تعذر بدء اللعبة</string>
+    <string name="lobby_loading">⏳ جاري تحميل اللاعبين...</string>
+    <string name="lobby_status_connected">متصل • %d / %d لاعبين</string>
+    <string name="lobby_status_unstable">⚠️ الاتصال متذبذب...</string>
+    <string name="lobby_status_failed">تعذر تحديث اللاعبين</string>
+
+    <!-- Answer Screen -->
+    <string name="answer_title">السؤال %d/%d</string>
+    <string name="answer_timer">⏱️ %d ثانية</string>
+    <string name="answer_timer_end">⏰ انتهى الوقت</string>
+    <string name="answer_hint">اكتب إجابتك...</string>
+    <string name="answer_send_button">📤 إرسال الإجابة</string>
+    <string name="answer_skip_button">⏭️ تخطي السؤال</string>
+    <string name="answer_chat">💬 Chat</string>
+    <string name="answer_error_empty">اكتب إجابتك</string>
+    <string name="answer_error_submitted">تم إرسال إجابتك بالفعل</string>
+    <string name="answer_error_invalid">الإجابة فارغة</string>
+    <string name="answer_error_send">فشل إرسال الإجابة: %s</string>
+    <string name="answer_error_skip">تعذر التخطي: %s</string>
+
+    <!-- Waiting for Answers -->
+    <string name="waiting_answers_title">⏳ نستنّاو صاحبك</string>
+    <string name="waiting_answers_subtitle">تم إرسال إجابتك بنجاح.\nكي يكمل اللاعب الآخر، تبدأ مرحلة التوقع.</string>
+    <string name="waiting_answers_counter">الإجابات: %d / %d</string>
+    <string name="waiting_answers_chat">💬 Chat</string>
+
+    <!-- Prediction Screen -->
+    <string name="prediction_title">🎯 وقت التوقع!</string>
+    <string name="prediction_subtitle">اختار صاحبك وتوقّع بالضبط شنوّة كتب.</string>
+    <string name="prediction_select_player">اختار اللاعب:</string>
+    <string name="prediction_hint">شنوّة تتوقع جاوب؟</string>
+    <string name="prediction_submit">🎯 تأكيد التوقع</string>
+    <string name="prediction_skip">⏭️ ما نحبش نتوقع</string>
+    <string name="prediction_chat">💬 Chat</string>
+    <string name="prediction_error_select">اختار لاعب</string>
+    <string name="prediction_error_empty">اكتب توقعك</string>
+    <string name="prediction_error_submitted">تم إرسال توقعك بالفعل</string>
+    <string name="prediction_error_invalid">اللاعب المستهدف غير صالح</string>
+    <string name="prediction_error_target">إجابة اللاعب غير موجودة</string>
+    <string name="prediction_error_send">فشل إرسال التوقع: %s</string>
+    <string name="prediction_error_load">تعذر تحميل اللاعبين</string>
+    <string name="prediction_error_no_players">ما فماش لاعب متاح</string>
+
+    <!-- Prediction Waiting -->
+    <string name="prediction_waiting_title">⏳ تم إرسال التوقع</string>
+    <string name="prediction_waiting_subtitle">نستنّاو اللاعب الآخر يكمل.</string>
+    <string name="prediction_waiting_counter">التوقعات: %d / %d</string>
+    <string name="prediction_waiting_chat">💬 Chat</string>
+
+    <!-- Results -->
+    <string name="results_title">🏆 نتيجة الجولة</string>
+    <string name="results_score">⭐ نقاطك\n%d</string>
+    <string name="results_correct">🎯 توقّع صحيح!\n+%d نقاط</string>
+    <string name="results_wrong">❌ التوقع ما صابش\n0 نقاط</string>
+    <string name="results_next">➡️ جاهز للجولة التالية</string>
+    <string name="results_chat">💬 Chat</string>
+    <string name="results_error">تعذر التسجيل: %s</string>
+
+    <!-- Waiting Next Round -->
+    <string name="waiting_next_title">⏳ جاهز</string>
+    <string name="waiting_next_subtitle">نستنّاو اللاعب الآخر...</string>
+
+    <!-- Leaderboard -->
+    <string name="leaderboard_title">🏆 Leaderboard</string>
+    <string name="leaderboard_subtitle">النتائج النهائية</string>
+    <string name="leaderboard_entry">%s  %d. %s\n      ⭐ %d نقطة</string>
+    <string name="leaderboard_gold">🥇</string>
+    <string name="leaderboard_silver">🥈</string>
+    <string name="leaderboard_bronze">🏅</string>
+    <string name="leaderboard_winner">👑 الفائز: %s</string>
+    <string name="leaderboard_tie">🤝 تعادل!</string>
+    <string name="leaderboard_play_again">🔄 Play Again</string>
+    <string name="leaderboard_lobby">🏠 العودة للـLobby</string>
+    <string name="leaderboard_home">🏠 الصفحة الرئيسية</string>
+    <string name="leaderboard_error_again">تعذر إعادة اللعبة: %s</string>
+    <string name="leaderboard_error_host">الـHost هو اللي يبدأ من جديد</string>
+
+    <!-- Chat -->
+    <string name="chat_title">💬 Chat</string>
+    <string name="chat_subtitle">احكوا مع بعض أثناء اللعب.</string>
+    <string name="chat_hint">اكتب رسالة...</string>
+    <string name="chat_send">📤 إرسال</string>
+    <string name="chat_back">رجوع</string>
+    <string name="chat_empty">ما فما حتى رسالة 👀</string>
+    <string name="chat_message">👤 %s\n   %s</string>
+    <string name="chat_error_send">فشل إرسال الرسالة: %s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">⚙️ الإعدادات</string>
+    <string name="settings_appearance">🎨 المظهر</string>
+    <string name="settings_appearance_dark">🌙 الوضع الداكن مفعل</string>
+    <string name="settings_appearance_light">☀️ الوضع الفاتح مفعل</string>
+    <string name="settings_toggle_dark">🌙 الوضع الداكن</string>
+    <string name="settings_toggle_light">☀️ الوضع الفاتح</string>
+    <string name="settings_audio">🎵 الصوت</string>
+    <string name="settings_music_enabled">🎵 الموسيقى مفعلة</string>
+    <string name="settings_music_disabled">🔇 الموسيقى متوقفة</string>
+    <string name="settings_sound_enabled">🔊 المؤثرات مفعلة</string>
+    <string name="settings_sound_disabled">🔇 المؤثرات متوقفة</string>
+    <string name="settings_music_on">🔇 إيقاف الموسيقى</string>
+    <string name="settings_music_off">🎵 تشغيل الموسيقى</string>
+    <string name="settings_sound_on">🔇 إيقاف المؤثرات</string>
+    <string name="settings_sound_off">🔊 تشغيل المؤثرات</string>
+    <string name="settings_about">🎮 GuessUs</string>
+    <string name="settings_about_text">لعبة توقع إجابات صاحبك.\n👥 لاعبان\n🎯 توقعات\n🏆 نقاط\n💬 Chat\n🎵 موسيقى\n\nالإصدار 1.0</string>
+    <string name="settings_back">رجوع</string>
+
+    <!-- Back Button -->
+    <string name="button_back">رجوع</string>
+
+    <!-- Generic -->
+    <string name="error_connection">خطأ في الاتصال</string>
+    <string name="error_timeout">انتهت مهلة الاتصال</string>
+    <string name="error_network">لا يوجد اتصال بالإنترنت</string>
+    <string name="error_supabase">خطأ في السيرفر</string>
+    <string name="error_unknown">حدث خطأ غير متوقع</string>
+    <string name="loading">جاري التحميل...</string>
+    <string name="retry">إعادة محاولة</string>
+    <string name="ok">حسناً</string>
+    <string name="cancel">إلغاء</string>
 </resources>
