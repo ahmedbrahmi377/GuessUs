@@ -12,6 +12,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.media.SoundPool;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
@@ -19,10 +20,10 @@ import android.os.Looper;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.view.MotionEvent;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -47,17 +48,23 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends Activity {
 
     // ============================================================
-    // SUPABASE / GAME
+    // CONSTANTS - SUPABASE & GAME
     // ============================================================
 
     private final String SUPABASE_URL = BuildConfig.SUPABASE_URL;
@@ -68,12 +75,18 @@ public class MainActivity extends Activity {
     private static final int MAX_NAME_LENGTH = 18;
     private static final int MAX_ANSWER_LENGTH = 300;
     private static final int MAX_MESSAGE_LENGTH = 240;
+    
     private static final long POLL_LOBBY = 2200L;
     private static final long POLL_GAME = 1600L;
     private static final long POLL_CHAT = 3000L;
 
+    private static final int NETWORK_TIMEOUT = 10000;
+    private static final int READ_TIMEOUT = 15000;
+    private static final int MAX_RETRIES = 3;
+    private static final long RETRY_DELAY = 500L;
+
     // ============================================================
-    // PLAYER / ROOM STATE
+    // STATE - PLAYER & ROOM
     // ============================================================
 
     private String roomCode = "";
@@ -83,8 +96,8 @@ public class MainActivity extends Activity {
 
     private int score = 0;
     private int questionIndex = 0;
-
     private boolean isHost = false;
+
     private boolean answerSent = false;
     private boolean predictionSent = false;
     private boolean nextReadySent = false;
@@ -92,8 +105,13 @@ public class MainActivity extends Activity {
     private String currentScreen = "";
     private int screenToken = 0;
 
+    // Prevent duplicate submissions
+    private final Set<String> submittedAnswers = new HashSet<>();
+    private final Set<String> submittedPredictions = new HashSet<>();
+    private final Set<String> submittedMessages = new HashSet<>();
+
     // ============================================================
-    // SETTINGS / THEME
+    // SETTINGS & THEME
     // ============================================================
 
     private SharedPreferences prefs;
@@ -126,13 +144,14 @@ public class MainActivity extends Activity {
     private boolean timeUpLoaded;
 
     // ============================================================
-    // ASYNC / TIMERS
+    // ASYNC & THREADING
     // ============================================================
 
     private CountDownTimer answerTimer;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newFixedThreadPool(3);
     private final AtomicBoolean pollBusy = new AtomicBoolean(false);
+    private final AtomicInteger networkErrors = new AtomicInteger(0);
 
     // ============================================================
     // QUESTIONS
@@ -192,7 +211,7 @@ public class MainActivity extends Activity {
     };
 
     // ============================================================
-    // ACTIVITY LIFECYCLE
+    // LIFECYCLE
     // ============================================================
 
     @Override
@@ -221,7 +240,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (musicEnabled) startMusic();
+        if (musicEnabled && "home".equals(currentScreen)) {
+            startMusic();
+        }
     }
 
     @Override
@@ -252,8 +273,19 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if ("chat".equals(currentScreen)) {
+            if (!roomCode.isEmpty()) {
+                showLobby();
+            } else {
+                showHome();
+            }
+            return;
+        }
+
         if (!roomCode.isEmpty()) {
             if ("lobby".equals(currentScreen)) {
+                leaveRoom();
+            } else if ("leaderboard".equals(currentScreen)) {
                 showHome();
             } else {
                 showLobby();
@@ -264,7 +296,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // THEME
+    // THEME & COLORS
     // ============================================================
 
     private void setupTheme() {
@@ -285,17 +317,21 @@ public class MainActivity extends Activity {
         }
 
         Window window = getWindow();
-        window.setStatusBarColor(bgColor);
-        window.setNavigationBarColor(bgColor);
-
-        int flags = 0;
-        if (!darkMode) {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        if (window != null) {
+            window.setStatusBarColor(bgColor);
+            if (Build.VERSION.SDK_INT >= 27) {
+                window.setNavigationBarColor(bgColor);
             }
+
+            int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+            if (!darkMode) {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (Build.VERSION.SDK_INT >= 26) {
+                    flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                }
+            }
+            window.getDecorView().setSystemUiVisibility(flags);
         }
-        window.getDecorView().setSystemUiVisibility(flags);
     }
 
     private void toggleDarkMode() {
@@ -320,7 +356,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // AUDIO
+    // AUDIO SYSTEM
     // ============================================================
 
     private void initAudio() {
@@ -347,7 +383,7 @@ public class MainActivity extends Activity {
             successSoundId = soundPool.load(this, R.raw.success, 1);
             wrongSoundId = soundPool.load(this, R.raw.wrong, 1);
             timeUpSoundId = soundPool.load(this, R.raw.time_up, 1);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             soundPool = null;
         }
     }
@@ -376,16 +412,6 @@ public class MainActivity extends Activity {
         playSound(timeUpSoundId, timeUpLoaded, 0.90f);
     }
 
-    private void releaseAudioEffects() {
-        try {
-            if (soundPool != null) {
-                soundPool.release();
-                soundPool = null;
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
     private void startMusic() {
         if (!musicEnabled) return;
         try {
@@ -393,16 +419,20 @@ public class MainActivity extends Activity {
                 musicPlayer = MediaPlayer.create(this, R.raw.bg_music);
                 if (musicPlayer == null) return;
                 musicPlayer.setLooping(true);
-                musicPlayer.setVolume(0.28f, 0.28f);
+                musicPlayer.setVolume(0.25f, 0.25f);
             }
-            if (!musicPlayer.isPlaying()) musicPlayer.start();
+            if (!musicPlayer.isPlaying()) {
+                musicPlayer.start();
+            }
         } catch (Exception ignored) {
         }
     }
 
     private void pauseMusic() {
         try {
-            if (musicPlayer != null && musicPlayer.isPlaying()) musicPlayer.pause();
+            if (musicPlayer != null && musicPlayer.isPlaying()) {
+                musicPlayer.pause();
+            }
         } catch (Exception ignored) {
         }
     }
@@ -411,7 +441,6 @@ public class MainActivity extends Activity {
         try {
             if (musicPlayer != null) {
                 if (musicPlayer.isPlaying()) musicPlayer.stop();
-                musicPlayer.reset();
                 musicPlayer.release();
                 musicPlayer = null;
             }
@@ -422,16 +451,23 @@ public class MainActivity extends Activity {
 
     private void releaseMusic() {
         try {
-            if (musicPlayer != null) {
-                musicPlayer.release();
-                musicPlayer = null;
+            stopMusic();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void releaseAudioEffects() {
+        try {
+            if (soundPool != null) {
+                soundPool.release();
+                soundPool = null;
             }
         } catch (Exception ignored) {
         }
     }
 
     // ============================================================
-    // POLLING / LIFECYCLE HELPERS
+    // POLLING & SCREEN MANAGEMENT
     // ============================================================
 
     private void stopAllPolling() {
@@ -452,9 +488,15 @@ public class MainActivity extends Activity {
 
     private void schedulePolling(Runnable runnable, long delay, int token, String name) {
         handler.postDelayed(() -> {
-            if (isScreen(token, name)) runnable.run();
+            if (isScreen(token, name)) {
+                runnable.run();
+            }
         }, delay);
     }
+
+    // ============================================================
+    // TEXT PROCESSING & VALIDATION
+    // ============================================================
 
     private String cleanText(String value, int maxLength) {
         if (value == null || maxLength <= 0) return "";
@@ -469,8 +511,15 @@ public class MainActivity extends Activity {
         return code != null && code.matches("\\d{4}");
     }
 
+    private String safeMessage(Exception e, String fallback) {
+        String message = e == null ? null : e.getMessage();
+        if (message == null || message.trim().isEmpty()) return fallback;
+        if (message.length() > 200) message = message.substring(0, 200);
+        return message;
+    }
+
     // ============================================================
-    // BASIC UI
+    // UI UTILITIES
     // ============================================================
 
     private int dp(int value) {
@@ -497,7 +546,9 @@ public class MainActivity extends Activity {
     private void applyBackground(LinearLayout root, String drawableName) {
         try {
             int id = getResources().getIdentifier(drawableName, "drawable", getPackageName());
-            if (id != 0) root.setBackgroundResource(id);
+            if (id != 0) {
+                root.setBackgroundResource(id);
+            }
         } catch (Exception ignored) {
         }
     }
@@ -613,13 +664,8 @@ public class MainActivity extends Activity {
     }
 
     private void toast(String message) {
+        if (message == null || message.trim().isEmpty()) return;
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private String safeMessage(Exception e, String fallback) {
-        String message = e == null ? null : e.getMessage();
-        if (message == null || message.trim().isEmpty()) return fallback;
-        return message;
     }
 
     private void setBusy(Button button, boolean busy, String busyText, String normalText) {
@@ -630,7 +676,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // HOME
+    // HOME SCREEN
     // ============================================================
 
     private void showHome() {
@@ -673,7 +719,9 @@ public class MainActivity extends Activity {
         root.addView(version);
 
         setScreen(scroll(root), "home");
-        if (musicEnabled && token == screenToken) startMusic();
+        if (musicEnabled && token == screenToken) {
+            startMusic();
+        }
     }
 
     // ============================================================
@@ -724,50 +772,45 @@ public class MainActivity extends Activity {
             JSONObject createdRoom = null;
             Exception lastError = null;
 
-            for (int attempt = 0; attempt < 3; attempt++) {
-                String code = generateRoomCode();
-
-                JSONObject room = new JSONObject();
-                room.put("code", code);
-                room.put("status", "waiting");
-
+            for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
                 try {
-                    String result = request(
-                            "POST",
-                            SUPABASE_URL + "/rest/v1/rooms",
-                            room.toString()
-                    );
+                    String code = generateRoomCode();
 
+                    JSONObject room = new JSONObject();
+                    room.put("code", code);
+                    room.put("status", "waiting");
+
+                    String result = request("POST", SUPABASE_URL + "/rest/v1/rooms", room.toString());
                     JSONArray rooms = safeJsonArray(result);
+
                     if (rooms.length() > 0) {
                         createdRoom = rooms.getJSONObject(0);
-                    } else {
-                        String lookup = request(
-                                "GET",
-                                SUPABASE_URL + "/rest/v1/rooms?code=eq." +
-                                        URLEncoder.encode(code, "UTF-8") +
-                                        "&select=*&limit=1",
-                                null
-                        );
-                        JSONArray found = safeJsonArray(lookup);
-                        if (found.length() > 0) createdRoom = found.getJSONObject(0);
-                    }
-
-                    if (createdRoom != null) {
                         createdCode = createdRoom.optString("code", code);
                         break;
+                    } else {
+                        String lookup = request("GET",
+                                SUPABASE_URL + "/rest/v1/rooms?code=eq." + URLEncoder.encode(code, "UTF-8") +
+                                        "&select=*&limit=1", null);
+                        JSONArray found = safeJsonArray(lookup);
+                        if (found.length() > 0) {
+                            createdRoom = found.getJSONObject(0);
+                            createdCode = createdRoom.optString("code", code);
+                            break;
+                        }
                     }
                 } catch (Exception e) {
                     lastError = e;
-                    if (e.getMessage() == null || !e.getMessage().contains("HTTP 409")) {
-                        throw e;
+                    if (e.getMessage() != null && !e.getMessage().contains("409")) {
+                        if (attempt < MAX_RETRIES - 1) {
+                            Thread.sleep(RETRY_DELAY);
+                        }
                     }
                 }
             }
 
             if (createdRoom == null) {
                 throw new Exception(lastError == null ?
-                        "Supabase لم يرجع الغرفة" : lastError.getMessage());
+                        "فشل إنشاء الغرفة" : lastError.getMessage());
             }
 
             roomId = createdRoom.optString("id", "");
@@ -775,8 +818,11 @@ public class MainActivity extends Activity {
             isHost = true;
             score = 0;
             questionIndex = 0;
+            submittedAnswers.clear();
+            submittedPredictions.clear();
+            submittedMessages.clear();
 
-            if (roomId.isEmpty()) throw new Exception("Supabase لم يرجع room id");
+            if (roomId.isEmpty()) throw new Exception("لم نتمكن من الحصول على معرّف الغرفة");
 
             createGameState();
             addPlayer();
@@ -786,6 +832,7 @@ public class MainActivity extends Activity {
                 playSuccess();
                 showLobby();
             });
+
         } catch (Exception e) {
             String message = safeMessage(e, "تعذر إنشاء الغرفة");
             runOnUiThread(() -> {
@@ -865,14 +912,11 @@ public class MainActivity extends Activity {
             if (!isValidRoomCode(code)) throw new Exception("كود الغرفة غير صالح");
             playerName = cleanText(playerName, MAX_NAME_LENGTH);
             if (playerName.isEmpty()) throw new Exception("اسم اللاعب غير صالح");
-            String encoded = URLEncoder.encode(code, "UTF-8");
 
-            JSONArray rooms = safeJsonArray(request(
-                    "GET",
+            String encoded = URLEncoder.encode(code, "UTF-8");
+            JSONArray rooms = safeJsonArray(request("GET",
                     SUPABASE_URL + "/rest/v1/rooms?code=eq." + encoded +
-                            "&select=*&limit=1",
-                    null
-            ));
+                            "&select=*&limit=1", null));
 
             if (rooms.length() == 0) throw new Exception("الغرفة غير موجودة");
 
@@ -885,6 +929,11 @@ public class MainActivity extends Activity {
             roomId = room.optString("id", "");
             roomCode = room.optString("code", code);
             isHost = false;
+            score = 0;
+            questionIndex = 0;
+            submittedAnswers.clear();
+            submittedPredictions.clear();
+            submittedMessages.clear();
 
             if (roomId.isEmpty()) throw new Exception("معرّف الغرفة غير موجود");
 
@@ -905,6 +954,7 @@ public class MainActivity extends Activity {
                 playSuccess();
                 showLobby();
             });
+
         } catch (Exception e) {
             String message = safeMessage(e, "تعذر الانضمام");
             runOnUiThread(() -> {
@@ -916,7 +966,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // PLAYER DATA
+    // PLAYER MANAGEMENT
     // ============================================================
 
     private void addPlayer() throws Exception {
@@ -933,24 +983,18 @@ public class MainActivity extends Activity {
     }
 
     private JSONArray getPlayers() throws Exception {
-        return safeJsonArray(request(
-                "GET",
+        return safeJsonArray(request("GET",
                 SUPABASE_URL + "/rest/v1/players?room_id=eq." +
                         URLEncoder.encode(roomId, "UTF-8") +
-                        "&select=*&order=joined_at.asc",
-                null
-        ));
+                        "&select=*&order=joined_at.asc", null));
     }
 
     private JSONObject getMe() throws Exception {
-        JSONArray data = safeJsonArray(request(
-                "GET",
+        JSONArray data = safeJsonArray(request("GET",
                 SUPABASE_URL + "/rest/v1/players?player_id=eq." +
                         URLEncoder.encode(playerId, "UTF-8") +
                         "&room_id=eq." + URLEncoder.encode(roomId, "UTF-8") +
-                        "&select=*&limit=1",
-                null
-        ));
+                        "&select=*&limit=1", null));
         if (data.length() == 0) throw new Exception("اللاعب غير موجود");
         return data.getJSONObject(0);
     }
@@ -989,7 +1033,7 @@ public class MainActivity extends Activity {
 
         LinearLayout playersCard = card();
         root.addView(playersCard);
-        loadLobbyPlayers(playersCard, status);
+        loadLobbyPlayers(playersCard, status, token);
 
         Button ready = button("✅ Ready");
         root.addView(ready);
@@ -1062,8 +1106,7 @@ public class MainActivity extends Activity {
         startLobbyPolling(token, playersCard, status);
     }
 
-    private void loadLobbyPlayers(LinearLayout card, TextView status) {
-        final int token = screenToken;
+    private void loadLobbyPlayers(LinearLayout card, TextView status, int token) {
         networkExecutor.execute(() -> {
             try {
                 JSONArray players = getPlayers();
@@ -1092,8 +1135,7 @@ public class MainActivity extends Activity {
             boolean ready = p.optBoolean("ready", false);
 
             TextView row = new TextView(this);
-            row.setText((host ? "👑 " : "👤 ") + name +
-                    (ready ? "   ✓ Ready" : "   • Waiting"));
+            row.setText((host ? "👑 " : "👤 ") + name + (ready ? "   ✓ Ready" : "   • Waiting"));
             row.setTextColor(textColor);
             row.setTextSize(16);
             row.setPadding(0, dp(10), 0, dp(10));
@@ -1131,9 +1173,15 @@ public class MainActivity extends Activity {
                                 showAnswerScreen();
                             }
                         });
+                        networkErrors.set(0);
                     } catch (Exception e) {
+                        int errors = networkErrors.incrementAndGet();
                         runOnUiThread(() -> {
-                            if (isScreen(token, "lobby")) status.setText("⚠️ الاتصال متذبذب...");
+                            if (isScreen(token, "lobby")) {
+                                if (errors > 2) {
+                                    status.setText("⚠️ الاتصال متذبذب...");
+                                }
+                            }
                         });
                     } finally {
                         pollBusy.set(false);
@@ -1323,9 +1371,13 @@ public class MainActivity extends Activity {
     }
 
     private void submitAnswer(String answer) throws Exception {
+        String key = roomCode + "-" + questionIndex + "-" + playerName;
+        if (submittedAnswers.contains(key)) {
+            throw new Exception("تم إرسال إجابتك بالفعل");
+        }
+
         String safeAnswer = cleanText(answer, MAX_ANSWER_LENGTH);
         if (safeAnswer.isEmpty()) throw new Exception("الإجابة فارغة");
-        if (hasSubmittedAnswer()) throw new Exception("تم إرسال إجابتك بالفعل");
 
         JSONObject object = new JSONObject();
         object.put("room_code", roomCode);
@@ -1333,16 +1385,15 @@ public class MainActivity extends Activity {
         object.put("player_name", playerName);
         object.put("answer", safeAnswer);
         request("POST", SUPABASE_URL + "/rest/v1/round_answers", object.toString());
+
+        submittedAnswers.add(key);
     }
 
     private JSONArray getRoundAnswers() throws Exception {
-        return safeJsonArray(request(
-                "GET",
+        return safeJsonArray(request("GET",
                 SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex + "&select=*&order=created_at.asc",
-                null
-        ));
+                        "&round=eq." + questionIndex + "&select=*&order=created_at.asc", null));
     }
 
     private int countUniqueField(JSONArray rows, String field) {
@@ -1401,18 +1452,22 @@ public class MainActivity extends Activity {
 
                         runOnUiThread(() -> {
                             if (!isScreen(token, "waiting_answers")) return;
-                            counter.setText("الإجابات: " + countUniqueField(answers, "player_name") + " / " + Math.min(players.length(), MAX_PLAYERS));
+                            counter.setText("الإجابات: " + countUniqueField(answers, "player_name") + " / " +
+                                    Math.min(players.length(), MAX_PLAYERS));
                             if ("predicting".equals(status)) showPredictionScreen();
                         });
 
-                        if (countUniqueField(answers, "player_name") >= MAX_PLAYERS && players.length() == MAX_PLAYERS && isHost &&
+                        if (countUniqueField(answers, "player_name") >= MAX_PLAYERS &&
+                                players.length() == MAX_PLAYERS && isHost &&
                                 "answering".equals(status)) {
                             setGameState(questionIndex, "predicting");
                             runOnUiThread(() -> {
                                 if (isScreen(token, "waiting_answers")) showPredictionScreen();
                             });
                         }
+                        networkErrors.set(0);
                     } catch (Exception ignored) {
+                        networkErrors.incrementAndGet();
                     } finally {
                         pollBusy.set(false);
                         schedulePolling(this, POLL_GAME, token, "waiting_answers");
@@ -1424,7 +1479,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // PREDICTION
+    // PREDICTION SCREEN
     // ============================================================
 
     private void showPredictionScreen() {
@@ -1484,7 +1539,7 @@ public class MainActivity extends Activity {
     }
 
     private void submitPredictionFromUi(Spinner spinner, EditText prediction,
-                                         Button submit, Button skip, boolean skipPrediction, int token) {
+                                        Button submit, Button skip, boolean skipPrediction, int token) {
         if (predictionSent) return;
         Object selected = spinner.getSelectedItem();
         if (selected == null) {
@@ -1543,7 +1598,7 @@ public class MainActivity extends Activity {
                     }
 
                     ArrayAdapter<String> adapter = new ArrayAdapter<String>(
-                            this, android.R.layout.simple_spinner_item, names) {
+                            MainActivity.this, android.R.layout.simple_spinner_item, names) {
                         @Override
                         public View getView(int position, View convertView, ViewGroup parent) {
                             TextView view = (TextView) super.getView(position, convertView, parent);
@@ -1576,10 +1631,14 @@ public class MainActivity extends Activity {
     }
 
     private void submitPrediction(String target, String predicted) throws Exception {
+        String key = roomCode + "-" + questionIndex + "-" + playerName;
+        if (submittedPredictions.contains(key)) {
+            throw new Exception("تم إرسال توقعك بالفعل");
+        }
+
         target = cleanText(target, MAX_NAME_LENGTH);
         predicted = "SKIP".equals(predicted) ? "SKIP" : cleanText(predicted, MAX_ANSWER_LENGTH);
         if (target.isEmpty()) throw new Exception("اللاعب المستهدف غير صالح");
-        if (hasSubmittedPrediction()) throw new Exception("تم إرسال توقعك بالفعل");
 
         String targetAnswer = getTargetAnswer(target);
         boolean correct = !"SKIP".equals(predicted) && similarAnswer(predicted, targetAnswer);
@@ -1607,18 +1666,17 @@ public class MainActivity extends Activity {
         } else {
             playWrong();
         }
+
+        submittedPredictions.add(key);
     }
 
     private String getTargetAnswer(String target) throws Exception {
-        JSONArray result = safeJsonArray(request(
-                "GET",
+        JSONArray result = safeJsonArray(request("GET",
                 SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
                         "&round=eq." + questionIndex +
                         "&player_name=eq." + URLEncoder.encode(target, "UTF-8") +
-                        "&select=answer&order=created_at.desc&limit=1",
-                null
-        ));
+                        "&select=answer&order=created_at.desc&limit=1", null));
         if (result.length() == 0) throw new Exception("إجابة اللاعب غير موجودة");
         return result.getJSONObject(0).optString("answer", "");
     }
@@ -1666,18 +1724,22 @@ public class MainActivity extends Activity {
 
                         runOnUiThread(() -> {
                             if (!isScreen(token, "prediction_waiting")) return;
-                            counter.setText("التوقعات: " + countUniqueField(predictions, "predictor") + " / " + Math.min(players.length(), MAX_PLAYERS));
+                            counter.setText("التوقعات: " + countUniqueField(predictions, "predictor") + " / " +
+                                    Math.min(players.length(), MAX_PLAYERS));
                             if ("results".equals(status)) showResults();
                         });
 
-                        if (countUniqueField(predictions, "predictor") >= MAX_PLAYERS && players.length() == MAX_PLAYERS && isHost &&
+                        if (countUniqueField(predictions, "predictor") >= MAX_PLAYERS &&
+                                players.length() == MAX_PLAYERS && isHost &&
                                 "predicting".equals(status)) {
                             setGameState(questionIndex, "results");
                             runOnUiThread(() -> {
                                 if (isScreen(token, "prediction_waiting")) showResults();
                             });
                         }
+                        networkErrors.set(0);
                     } catch (Exception ignored) {
+                        networkErrors.incrementAndGet();
                     } finally {
                         pollBusy.set(false);
                         schedulePolling(this, POLL_GAME, token, "prediction_waiting");
@@ -1689,17 +1751,14 @@ public class MainActivity extends Activity {
     }
 
     private JSONArray getPredictions() throws Exception {
-        return safeJsonArray(request(
-                "GET",
+        return safeJsonArray(request("GET",
                 SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex + "&select=*",
-                null
-        ));
+                        "&round=eq." + questionIndex + "&select=*", null));
     }
 
     // ============================================================
-    // RESULTS / LEADERBOARD
+    // RESULTS
     // ============================================================
 
     private void showResults() {
@@ -1755,15 +1814,12 @@ public class MainActivity extends Activity {
     private void loadRoundResult(LinearLayout card, int token) {
         networkExecutor.execute(() -> {
             try {
-                JSONArray data = safeJsonArray(request(
-                        "GET",
+                JSONArray data = safeJsonArray(request("GET",
                         SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
                                 URLEncoder.encode(roomCode, "UTF-8") +
                                 "&round=eq." + questionIndex +
                                 "&predictor=eq." + URLEncoder.encode(playerName, "UTF-8") +
-                                "&select=*&order=created_at.desc&limit=1",
-                        null
-                ));
+                                "&select=*&order=created_at.desc&limit=1", null));
                 if (data.length() == 0) return;
 
                 JSONObject p = data.getJSONObject(0);
@@ -1790,7 +1846,7 @@ public class MainActivity extends Activity {
         int token = beginScreen("waiting_next");
         LinearLayout root = root();
         root.addView(title("⏳ جاهز"));
-        root.addView(subtitle("نستنّاو اللاعب الآخر...") );
+        root.addView(subtitle("نستنّاو اللاعب الآخر..."));
         setScreen(scroll(root), "waiting_next");
         startResultsPolling(token, "waiting_next");
     }
@@ -1799,7 +1855,8 @@ public class MainActivity extends Activity {
         Runnable poll = new Runnable() {
             @Override
             public void run() {
-                if (!("results".equals(currentScreen) || "waiting_next".equals(currentScreen)) || token != screenToken) return;
+                if (!("results".equals(currentScreen) || "waiting_next".equals(currentScreen)) ||
+                        token != screenToken) return;
                 if (!pollBusy.compareAndSet(false, true)) {
                     schedulePolling(this, 700L, token, screenName);
                     return;
@@ -1823,7 +1880,8 @@ public class MainActivity extends Activity {
                         if ("answering".equals(status)) {
                             questionIndex = Math.max(0, Math.min(index, questions.length - 1));
                             runOnUiThread(() -> {
-                                if (token == screenToken && ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
+                                if (token == screenToken &&
+                                        ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
                                     showAnswerScreen();
                                 }
                             });
@@ -1832,7 +1890,8 @@ public class MainActivity extends Activity {
 
                         if ("finished".equals(status)) {
                             runOnUiThread(() -> {
-                                if (token == screenToken && ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
+                                if (token == screenToken &&
+                                        ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
                                     showLeaderboard();
                                 }
                             });
@@ -1843,10 +1902,13 @@ public class MainActivity extends Activity {
                             advanceRound();
                             return;
                         }
+                        networkErrors.set(0);
                     } catch (Exception ignored) {
+                        networkErrors.incrementAndGet();
                     } finally {
                         pollBusy.set(false);
-                        if (token == screenToken && ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
+                        if (token == screenToken &&
+                                ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
                             schedulePolling(this, POLL_GAME, token, screenName);
                         }
                     }
@@ -1870,10 +1932,14 @@ public class MainActivity extends Activity {
                 }
 
                 questionIndex = next;
+                answerSent = false;
+                predictionSent = false;
+                nextReadySent = false;
                 setGameState(questionIndex, "answering");
                 runOnUiThread(this::showAnswerScreen);
             } catch (Exception e) {
-                runOnUiThread(() -> toast("تعذر الانتقال للجولة التالية: " + safeMessage(e, "خطأ")));
+                runOnUiThread(() ->
+                        toast("تعذر الانتقال للجولة التالية: " + safeMessage(e, "خطأ")));
             }
         });
     }
@@ -1901,7 +1967,7 @@ public class MainActivity extends Activity {
                     scoreCard.removeAllViews();
                     for (int i = 0; i < list.size(); i++) {
                         JSONObject p = list.get(i);
-                        TextView row = new TextView(this);
+                        TextView row = new TextView(MainActivity.this);
                         String medal = i == 0 ? "🥇" : (i == 1 ? "🥈" : "🏅");
                         row.setText(medal + "  " + (i + 1) + ". " + p.optString("name", "?") +
                                 "\n      ⭐ " + p.optInt("score", 0) + " نقطة");
@@ -1914,7 +1980,7 @@ public class MainActivity extends Activity {
                     if (list.size() == 2) {
                         int a = list.get(0).optInt("score", 0);
                         int b = list.get(1).optInt("score", 0);
-                        TextView winner = new TextView(this);
+                        TextView winner = new TextView(MainActivity.this);
                         winner.setText(a == b ? "🤝 تعادل!" : "👑 الفائز: " + list.get(0).optString("name", "?"));
                         winner.setTextColor(accentColor);
                         winner.setTextSize(22);
@@ -1942,6 +2008,11 @@ public class MainActivity extends Activity {
                     resetScores();
                     setAllReady(false);
                     questionIndex = 0;
+                    answerSent = false;
+                    predictionSent = false;
+                    nextReadySent = false;
+                    submittedAnswers.clear();
+                    submittedPredictions.clear();
                     setRoomStatus("playing");
                     setGameState(0, "answering");
                     runOnUiThread(this::showAnswerScreen);
@@ -1959,14 +2030,14 @@ public class MainActivity extends Activity {
         root.addView(lobby);
 
         Button home = button("🏠 الصفحة الرئيسية");
-        home.setOnClickListener(v -> showHome());
+        home.setOnClickListener(v -> leaveRoom());
         root.addView(home);
 
         setScreen(scroll(root), "leaderboard");
     }
 
     // ============================================================
-    // SCORES / READY / LEAVE
+    // SCORES & READY
     // ============================================================
 
     private void resetScores() throws Exception {
@@ -2006,11 +2077,15 @@ public class MainActivity extends Activity {
                 URLEncoder.encode(roomId, "UTF-8"), update.toString());
     }
 
+    // ============================================================
+    // LEAVE ROOM
+    // ============================================================
+
     private void leaveRoom() {
         stopAllPolling();
         networkExecutor.execute(() -> {
             try {
-                if (isHost) {
+                if (isHost && !roomId.isEmpty()) {
                     JSONArray players = getPlayers();
                     for (int i = 0; i < players.length(); i++) {
                         JSONObject p = players.getJSONObject(i);
@@ -2050,20 +2125,20 @@ public class MainActivity extends Activity {
         answerSent = false;
         predictionSent = false;
         nextReadySent = false;
+        submittedAnswers.clear();
+        submittedPredictions.clear();
+        submittedMessages.clear();
     }
 
     // ============================================================
-    // GAME STATE / ROOM STATUS
+    // GAME STATE
     // ============================================================
 
     private JSONObject getGameState() throws Exception {
-        JSONArray data = safeJsonArray(request(
-                "GET",
+        JSONArray data = safeJsonArray(request("GET",
                 SUPABASE_URL + "/rest/v1/game_state?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&select=*&limit=1",
-                null
-        ));
+                        "&select=*&limit=1", null));
         if (data.length() == 0) throw new Exception("game state not found");
         return data.getJSONObject(0);
     }
@@ -2115,6 +2190,13 @@ public class MainActivity extends Activity {
         send.setOnClickListener(v -> {
             String text = cleanText(message.getText().toString(), MAX_MESSAGE_LENGTH);
             if (text.isEmpty()) return;
+
+            String msgKey = roomId + "-" + playerName + "-" + text;
+            if (submittedMessages.contains(msgKey)) {
+                toast("لا تكرر نفس الرسالة");
+                return;
+            }
+
             setBusy(send, true, "⏳ ...", "📤 إرسال");
 
             networkExecutor.execute(() -> {
@@ -2124,6 +2206,9 @@ public class MainActivity extends Activity {
                     object.put("player_name", playerName);
                     object.put("message", text);
                     request("POST", SUPABASE_URL + "/rest/v1/messages", object.toString());
+
+                    submittedMessages.add(msgKey);
+
                     runOnUiThread(() -> {
                         if (!isScreen(token, "chat")) return;
                         message.setText("");
@@ -2142,7 +2227,9 @@ public class MainActivity extends Activity {
         });
 
         Button back = button("رجوع");
-        back.setOnClickListener(v -> showLobby());
+        back.setOnClickListener(v -> {
+            if (!roomCode.isEmpty()) showLobby(); else showHome();
+        });
         root.addView(back);
 
         setScreen(scroll(root), "chat");
@@ -2153,13 +2240,10 @@ public class MainActivity extends Activity {
     private void loadMessages(LinearLayout container, int token) {
         networkExecutor.execute(() -> {
             try {
-                JSONArray data = safeJsonArray(request(
-                        "GET",
+                JSONArray data = safeJsonArray(request("GET",
                         SUPABASE_URL + "/rest/v1/messages?room_id=eq." +
                                 URLEncoder.encode(roomId, "UTF-8") +
-                                "&select=*&order=created_at.desc&limit=50",
-                        null
-                ));
+                                "&select=*&order=created_at.desc&limit=50", null));
 
                 runOnUiThread(() -> {
                     if (!isScreen(token, "chat")) return;
@@ -2252,9 +2336,13 @@ public class MainActivity extends Activity {
         TextView aboutText = new TextView(this);
         aboutText.setText("🎮 GuessUs\n\n" +
                 "لعبة توقع إجابات صاحبك.\n" +
-                "👥 لاعبان\n🎯 توقعات\n🏆 نقاط\n💬 Chat\n🎵 موسيقى\n\nالإصدار 1.0");
+                "👥 لاعبان • 🎯 توقعات • 🏆 نقاط\n" +
+                "💬 Chat • 🎵 موسيقى\n\n" +
+                "الإصدار 1.0\n" +
+                "Online Party Game");
         aboutText.setTextColor(textColor);
         aboutText.setTextSize(16);
+        aboutText.setGravity(Gravity.CENTER);
         about.addView(aboutText);
         root.addView(about);
 
@@ -2266,34 +2354,8 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // VALIDATION / DATA SAFETY
+    // DATA VALIDATION
     // ============================================================
-
-    private boolean hasSubmittedAnswer() throws Exception {
-        JSONArray data = safeJsonArray(request(
-                "GET",
-                SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
-                        URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex +
-                        "&player_name=eq." + URLEncoder.encode(playerName, "UTF-8") +
-                        "&select=player_name&limit=1",
-                null
-        ));
-        return data.length() > 0;
-    }
-
-    private boolean hasSubmittedPrediction() throws Exception {
-        JSONArray data = safeJsonArray(request(
-                "GET",
-                SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
-                        URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex +
-                        "&predictor=eq." + URLEncoder.encode(playerName, "UTF-8") +
-                        "&select=predictor&limit=1",
-                null
-        ));
-        return data.length() > 0;
-    }
 
     private void clearMatchData() throws Exception {
         String encodedRoom = URLEncoder.encode(roomCode, "UTF-8");
@@ -2302,7 +2364,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // ANSWER COMPARISON
+    // TEXT NORMALIZATION & COMPARISON
     // ============================================================
 
     private String normalize(String value) {
@@ -2346,7 +2408,7 @@ public class MainActivity extends Activity {
     }
 
     // ============================================================
-    // SUPABASE HTTP
+    // SUPABASE HTTP REQUEST
     // ============================================================
 
     private void validateSupabase() throws Exception {
@@ -2368,8 +2430,8 @@ public class MainActivity extends Activity {
             URL url = new URL(urlString);
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod(method);
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(15000);
+            connection.setConnectTimeout(NETWORK_TIMEOUT);
+            connection.setReadTimeout(READ_TIMEOUT);
             connection.setUseCaches(false);
             connection.setDoInput(true);
 
@@ -2406,14 +2468,19 @@ public class MainActivity extends Activity {
 
             if (responseCode < 200 || responseCode >= 300) {
                 String clean = responseBody;
-                if (clean.length() > 450) clean = clean.substring(0, 450);
+                if (clean.length() > 300) clean = clean.substring(0, 300);
                 throw new Exception("HTTP " + responseCode +
                         (clean.isEmpty() ? "" : ": " + clean));
             }
 
             return responseBody;
         } finally {
-            if (connection != null) connection.disconnect();
+            if (connection != null) {
+                try {
+                    connection.disconnect();
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
@@ -2425,4 +2492,4 @@ public class MainActivity extends Activity {
         if (trimmed.startsWith("{")) array.put(new JSONObject(trimmed));
         return array;
     }
-}
+                    }
