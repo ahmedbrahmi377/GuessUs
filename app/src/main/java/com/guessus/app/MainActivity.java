@@ -716,7 +716,7 @@ public class MainActivity extends Activity {
                 try {
                     String result = request(
                             "POST",
-                            SUPABASE_URL + "/rest/v1/rooms",
+                            api("/rooms"),
                             room.toString()
                     );
 
@@ -726,9 +726,9 @@ public class MainActivity extends Activity {
                     } else {
                         String lookup = request(
                                 "GET",
-                                SUPABASE_URL + "/rest/v1/rooms?code=eq." +
+                                api("/rooms?code=eq." +
                                         URLEncoder.encode(code, "UTF-8") +
-                                        "&select=*&limit=1",
+                                        "&select=*&limit=1"),
                                 null
                         );
                         JSONArray found = safeJsonArray(lookup);
@@ -789,7 +789,7 @@ public class MainActivity extends Activity {
         state.put("question_index", 0);
         state.put("status", "waiting");
         state.put("updated_at", getCurrentTimestamp());
-        request("POST", SUPABASE_URL + "/rest/v1/game_state", state.toString());
+        request("POST", api("/game_state"), state.toString());
     }
 
     // ============================================================
@@ -847,8 +847,8 @@ public class MainActivity extends Activity {
 
             JSONArray rooms = safeJsonArray(request(
                     "GET",
-                    SUPABASE_URL + "/rest/v1/rooms?code=eq." + encoded +
-                            "&select=*&limit=1",
+                    api("/rooms?code=eq." + encoded +
+                            "&select=*&limit=1"),
                     null
             ));
 
@@ -907,15 +907,15 @@ public class MainActivity extends Activity {
         player.put("score", 0);
         player.put("ready", false);
 
-        request("POST", SUPABASE_URL + "/rest/v1/players", player.toString());
+        request("POST", api("/players"), player.toString());
     }
 
     private JSONArray getPlayers() throws Exception {
         return safeJsonArray(request(
                 "GET",
-                SUPABASE_URL + "/rest/v1/players?room_id=eq." +
+                api("/players?room_id=eq." +
                         URLEncoder.encode(roomId, "UTF-8") +
-                        "&select=*&order=joined_at.asc",
+                        "&select=*&order=joined_at.asc"),
                 null
         ));
     }
@@ -923,10 +923,10 @@ public class MainActivity extends Activity {
     private JSONObject getMe() throws Exception {
         JSONArray data = safeJsonArray(request(
                 "GET",
-                SUPABASE_URL + "/rest/v1/players?player_id=eq." +
+                api("/players?player_id=eq." +
                         URLEncoder.encode(playerId, "UTF-8") +
                         "&room_id=eq." + URLEncoder.encode(roomId, "UTF-8") +
-                        "&select=*&limit=1",
+                        "&select=*&limit=1"),
                 null
         ));
         if (data.length() == 0) throw new Exception("اللاعب غير موجود");
@@ -1305,15 +1305,15 @@ public class MainActivity extends Activity {
         object.put("round", questionIndex);
         object.put("player_name", playerName);
         object.put("answer", answer);
-        request("POST", SUPABASE_URL + "/rest/v1/round_answers", object.toString());
+        request("POST", api("/round_answers"), object.toString());
     }
 
     private JSONArray getRoundAnswers() throws Exception {
         return safeJsonArray(request(
                 "GET",
-                SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
+                api("/round_answers?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex + "&select=*",
+                        "&round=eq." + questionIndex + "&select=*"),
                 null
         ));
     }
@@ -1551,7 +1551,7 @@ public class MainActivity extends Activity {
         prediction.put("predicted_answer", predicted);
         prediction.put("correct", correct);
         prediction.put("points", points);
-        request("POST", SUPABASE_URL + "/rest/v1/predictions", prediction.toString());
+        request("POST", api("/predictions"), prediction.toString());
 
         if (points > 0) {
             score += points;
@@ -1565,11 +1565,11 @@ public class MainActivity extends Activity {
     private String getTargetAnswer(String target) throws Exception {
         JSONArray result = safeJsonArray(request(
                 "GET",
-                SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
+                api("/round_answers?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
                         "&round=eq." + questionIndex +
                         "&player_name=eq." + URLEncoder.encode(target, "UTF-8") +
-                        "&select=answer&limit=1",
+                        "&select=answer&limit=1"),
                 null
         ));
         if (result.length() == 0) throw new Exception("إجابة اللاعب غير موجودة");
@@ -1643,9 +1643,9 @@ public class MainActivity extends Activity {
     private JSONArray getPredictions() throws Exception {
         return safeJsonArray(request(
                 "GET",
-                SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
+                api("/predictions?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex + "&select=*",
+                        "&round=eq." + questionIndex + "&select=*"),
                 null
         ));
     }
@@ -1709,11 +1709,11 @@ public class MainActivity extends Activity {
             try {
                 JSONArray data = safeJsonArray(request(
                         "GET",
-                        SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
+                        api("/predictions?room_code=eq." +
                                 URLEncoder.encode(roomCode, "UTF-8") +
                                 "&round=eq." + questionIndex +
                                 "&predictor=eq." + URLEncoder.encode(playerName, "UTF-8") +
-                                "&select=*&limit=1",
+                                "&select=*&limit=1"),
                         null
                 ));
                 if (data.length() == 0) return;
@@ -1929,8 +1929,8 @@ public class MainActivity extends Activity {
             JSONObject update = new JSONObject();
             update.put("score", 0);
             update.put("ready", false);
-            request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
-                    URLEncoder.encode(id, "UTF-8"), update.toString());
+            request("PATCH", api("/players?player_id=eq." +
+                    URLEncoder.encode(id, "UTF-8")), update.toString());
         }
         score = 0;
     }
@@ -1938,22 +1938,22 @@ public class MainActivity extends Activity {
     private void updateMyScore() throws Exception {
         JSONObject update = new JSONObject();
         update.put("score", score);
-        request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
-                URLEncoder.encode(playerId, "UTF-8"), update.toString());
+        request("PATCH", api("/players?player_id=eq." +
+                URLEncoder.encode(playerId, "UTF-8")), update.toString());
     }
 
     private void setPlayerReady(boolean ready) throws Exception {
         JSONObject update = new JSONObject();
         update.put("ready", ready);
-        request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
-                URLEncoder.encode(playerId, "UTF-8"), update.toString());
+        request("PATCH", api("/players?player_id=eq." +
+                URLEncoder.encode(playerId, "UTF-8")), update.toString());
     }
 
     private void setAllReady(boolean ready) throws Exception {
         JSONObject update = new JSONObject();
         update.put("ready", ready);
-        request("PATCH", SUPABASE_URL + "/rest/v1/players?room_id=eq." +
-                URLEncoder.encode(roomId, "UTF-8"), update.toString());
+        request("PATCH", api("/players?room_id=eq." +
+                URLEncoder.encode(roomId, "UTF-8")), update.toString());
     }
 
     private void leaveRoom() {
@@ -1968,16 +1968,16 @@ public class MainActivity extends Activity {
                         if (!id.equals(playerId) && !id.isEmpty()) {
                             JSONObject update = new JSONObject();
                             update.put("is_host", true);
-                            request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
-                                    URLEncoder.encode(id, "UTF-8"), update.toString());
+                            request("PATCH", api("/players?player_id=eq." +
+                                    URLEncoder.encode(id, "UTF-8")), update.toString());
                             break;
                         }
                     }
                 }
 
                 if (!playerId.isEmpty()) {
-                    request("DELETE", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
-                            URLEncoder.encode(playerId, "UTF-8"), null);
+                    request("DELETE", api("/players?player_id=eq." +
+                            URLEncoder.encode(playerId, "UTF-8")), null);
                 }
 
                 runOnUiThread(() -> {
@@ -2009,9 +2009,9 @@ public class MainActivity extends Activity {
     private JSONObject getGameState() throws Exception {
         JSONArray data = safeJsonArray(request(
                 "GET",
-                SUPABASE_URL + "/rest/v1/game_state?room_code=eq." +
+                api("/game_state?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&select=*&limit=1",
+                        "&select=*&limit=1"),
                 null
         ));
         if (data.length() == 0) throw new Exception("game state not found");
@@ -2023,15 +2023,15 @@ public class MainActivity extends Activity {
         update.put("question_index", index);
         update.put("status", status);
         update.put("updated_at", getCurrentTimestamp());
-        request("PATCH", SUPABASE_URL + "/rest/v1/game_state?room_code=eq." +
-                URLEncoder.encode(roomCode, "UTF-8"), update.toString());
+        request("PATCH", api("/game_state?room_code=eq." +
+                URLEncoder.encode(roomCode, "UTF-8")), update.toString());
     }
 
     private void setRoomStatus(String status) throws Exception {
         JSONObject update = new JSONObject();
         update.put("status", status);
-        request("PATCH", SUPABASE_URL + "/rest/v1/rooms?id=eq." +
-                URLEncoder.encode(roomId, "UTF-8"), update.toString());
+        request("PATCH", api("/rooms?id=eq." +
+                URLEncoder.encode(roomId, "UTF-8")), update.toString());
     }
 
     private String getCurrentTimestamp() {
@@ -2072,7 +2072,7 @@ public class MainActivity extends Activity {
                     object.put("room_id", roomId);
                     object.put("player_name", playerName);
                     object.put("message", text);
-                    request("POST", SUPABASE_URL + "/rest/v1/messages", object.toString());
+                    request("POST", api("/messages"), object.toString());
                     runOnUiThread(() -> {
                         if (!isScreen(token, "chat")) return;
                         message.setText("");
@@ -2104,9 +2104,9 @@ public class MainActivity extends Activity {
             try {
                 JSONArray data = safeJsonArray(request(
                         "GET",
-                        SUPABASE_URL + "/rest/v1/messages?room_id=eq." +
+                        api("/messages?room_id=eq." +
                                 URLEncoder.encode(roomId, "UTF-8") +
-                                "&select=*&order=created_at.desc&limit=50",
+                                "&select=*&order=created_at.desc&limit=50"),
                         null
                 ));
 
@@ -2267,6 +2267,23 @@ public class MainActivity extends Activity {
                 SUPABASE_KEY.contains("${") || SUPABASE_KEY.contains("null")) {
             throw new Exception("SUPABASE_KEY غير مضبوط في BuildConfig");
         }
+    }
+
+    /** Builds a Supabase REST URL and prevents /rest/v1/rest/v1/... */
+    private String api(String path) throws Exception {
+        validateSupabase();
+        String base = SUPABASE_URL.trim();
+        while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+        String suffix = "/rest/v1";
+        if (base.length() >= suffix.length() &&
+                base.regionMatches(true, base.length() - suffix.length(), suffix, 0, suffix.length())) {
+            base = base.substring(0, base.length() - suffix.length());
+            while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+        }
+        if (path == null || path.trim().isEmpty()) throw new Exception("مسار Supabase فارغ");
+        String clean = path.trim();
+        if (!clean.startsWith("/")) clean = "/" + clean;
+        return base + "/rest/v1" + clean;
     }
 
     private String request(String method, String urlString, String body) throws Exception {
