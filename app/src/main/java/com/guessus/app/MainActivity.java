@@ -716,7 +716,7 @@ public class MainActivity extends Activity {
                 try {
                     String result = request(
                             "POST",
-                            api("/rooms"),
+                            SUPABASE_URL + "/rest/v1/rooms",
                             room.toString()
                     );
 
@@ -726,9 +726,9 @@ public class MainActivity extends Activity {
                     } else {
                         String lookup = request(
                                 "GET",
-                                api("/rooms?code=eq." +
+                                SUPABASE_URL + "/rest/v1/rooms?code=eq." +
                                         URLEncoder.encode(code, "UTF-8") +
-                                        "&select=*&limit=1"),
+                                        "&select=*&limit=1",
                                 null
                         );
                         JSONArray found = safeJsonArray(lookup);
@@ -789,7 +789,7 @@ public class MainActivity extends Activity {
         state.put("question_index", 0);
         state.put("status", "waiting");
         state.put("updated_at", getCurrentTimestamp());
-        request("POST", api("/game_state"), state.toString());
+        request("POST", SUPABASE_URL + "/rest/v1/game_state", state.toString());
     }
 
     // ============================================================
@@ -847,8 +847,8 @@ public class MainActivity extends Activity {
 
             JSONArray rooms = safeJsonArray(request(
                     "GET",
-                    api("/rooms?code=eq." + encoded +
-                            "&select=*&limit=1"),
+                    SUPABASE_URL + "/rest/v1/rooms?code=eq." + encoded +
+                            "&select=*&limit=1",
                     null
             ));
 
@@ -907,15 +907,15 @@ public class MainActivity extends Activity {
         player.put("score", 0);
         player.put("ready", false);
 
-        request("POST", api("/players"), player.toString());
+        request("POST", SUPABASE_URL + "/rest/v1/players", player.toString());
     }
 
     private JSONArray getPlayers() throws Exception {
         return safeJsonArray(request(
                 "GET",
-                api("/players?room_id=eq." +
+                SUPABASE_URL + "/rest/v1/players?room_id=eq." +
                         URLEncoder.encode(roomId, "UTF-8") +
-                        "&select=*&order=joined_at.asc"),
+                        "&select=*&order=joined_at.asc",
                 null
         ));
     }
@@ -923,10 +923,10 @@ public class MainActivity extends Activity {
     private JSONObject getMe() throws Exception {
         JSONArray data = safeJsonArray(request(
                 "GET",
-                api("/players?player_id=eq." +
+                SUPABASE_URL + "/rest/v1/players?player_id=eq." +
                         URLEncoder.encode(playerId, "UTF-8") +
                         "&room_id=eq." + URLEncoder.encode(roomId, "UTF-8") +
-                        "&select=*&limit=1"),
+                        "&select=*&limit=1",
                 null
         ));
         if (data.length() == 0) throw new Exception("اللاعب غير موجود");
@@ -942,17 +942,40 @@ public class MainActivity extends Activity {
         int token = beginScreen("lobby");
 
         LinearLayout root = root();
-        applyBackground(root, "bg_lobby");
+        // لا نستخدم bg_lobby هنا لأن الصورة القديمة تحتوي على عناصر UI مرسومة بداخلها
+        // مثل Lobby / كود تجريبي / زر بدء اللعبة، وهذا يسبب تكرار وتداخل العناصر.
+        applyCleanLobbyBackground(root);
 
         TextView t = title("🎮 Lobby");
-        t.setTextColor(textColor);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(30);
+        t.setPadding(0, dp(8), 0, dp(10));
         root.addView(t);
 
-        TextView room = subtitle("كود الغرفة\n" + roomCode);
-        room.setTextSize(23);
-        room.setTextColor(textColor);
+        TextView hint = subtitle("الغرفة جاهزة • شارك الكود مع صاحبك");
+        hint.setTextColor(Color.WHITE);
+        hint.setAlpha(0.90f);
+        root.addView(hint);
+
+        // بطاقة الكود: منفصلة وواضحة حتى لا يتداخل مع بقية الواجهة.
+        LinearLayout codeCard = card();
+        codeCard.setPadding(dp(18), dp(12), dp(18), dp(12));
+
+        TextView codeLabel = label("🔑 كود الغرفة");
+        codeLabel.setTextColor(textColor);
+        codeLabel.setGravity(Gravity.CENTER);
+        codeCard.addView(codeLabel);
+
+        TextView room = new TextView(this);
+        room.setText(roomCode == null ? "----" : roomCode);
+        room.setTextColor(accentColor);
+        room.setTextSize(32);
+        room.setGravity(Gravity.CENTER);
         room.setTypeface(null, Typeface.BOLD);
-        root.addView(room);
+        room.setLetterSpacing(0.12f);
+        room.setPadding(0, dp(2), 0, dp(5));
+        codeCard.addView(room);
+        root.addView(codeCard);
 
         Button copy = button("📋 نسخ الكود");
         copy.setOnClickListener(v -> copyRoomCode());
@@ -963,9 +986,12 @@ public class MainActivity extends Activity {
         root.addView(share);
 
         TextView status = subtitle("⏳ جاري تحميل اللاعبين...");
+        status.setTextColor(Color.WHITE);
+        status.setTextSize(15);
         root.addView(status);
 
         LinearLayout playersCard = card();
+        playersCard.setPadding(dp(18), dp(10), dp(18), dp(10));
         root.addView(playersCard);
         loadLobbyPlayers(playersCard, status);
 
@@ -1036,8 +1062,29 @@ public class MainActivity extends Activity {
         leave.setOnClickListener(v -> leaveRoom());
         root.addView(leave);
 
+        // مسافة سفلية صغيرة تمنع التصاق آخر زر بحافة الشاشة.
+        View bottomSpace = new View(this);
+        root.addView(bottomSpace, new LinearLayout.LayoutParams(1, dp(12)));
+
         setScreen(scroll(root), "lobby");
         startLobbyPolling(token, playersCard, status);
+    }
+
+    /**
+     * خلفية نظيفة للـLobby بدون أي نصوص أو أزرار مرسومة مسبقاً داخل الصورة.
+     * هذا يمنع ظهور Lobby / ABCD12 / بدء اللعبة مرتين فوق الواجهة الحقيقية.
+     */
+    private void applyCleanLobbyBackground(LinearLayout root) {
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{
+                        Color.rgb(18, 8, 43),
+                        Color.rgb(49, 18, 91),
+                        Color.rgb(17, 12, 45)
+                }
+        );
+        bg.setCornerRadius(0f);
+        root.setBackground(bg);
     }
 
     private void loadLobbyPlayers(LinearLayout card, TextView status) {
@@ -1305,15 +1352,15 @@ public class MainActivity extends Activity {
         object.put("round", questionIndex);
         object.put("player_name", playerName);
         object.put("answer", answer);
-        request("POST", api("/round_answers"), object.toString());
+        request("POST", SUPABASE_URL + "/rest/v1/round_answers", object.toString());
     }
 
     private JSONArray getRoundAnswers() throws Exception {
         return safeJsonArray(request(
                 "GET",
-                api("/round_answers?room_code=eq." +
+                SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex + "&select=*"),
+                        "&round=eq." + questionIndex + "&select=*",
                 null
         ));
     }
@@ -1551,7 +1598,7 @@ public class MainActivity extends Activity {
         prediction.put("predicted_answer", predicted);
         prediction.put("correct", correct);
         prediction.put("points", points);
-        request("POST", api("/predictions"), prediction.toString());
+        request("POST", SUPABASE_URL + "/rest/v1/predictions", prediction.toString());
 
         if (points > 0) {
             score += points;
@@ -1565,11 +1612,11 @@ public class MainActivity extends Activity {
     private String getTargetAnswer(String target) throws Exception {
         JSONArray result = safeJsonArray(request(
                 "GET",
-                api("/round_answers?room_code=eq." +
+                SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
                         "&round=eq." + questionIndex +
                         "&player_name=eq." + URLEncoder.encode(target, "UTF-8") +
-                        "&select=answer&limit=1"),
+                        "&select=answer&limit=1",
                 null
         ));
         if (result.length() == 0) throw new Exception("إجابة اللاعب غير موجودة");
@@ -1643,9 +1690,9 @@ public class MainActivity extends Activity {
     private JSONArray getPredictions() throws Exception {
         return safeJsonArray(request(
                 "GET",
-                api("/predictions?room_code=eq." +
+                SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&round=eq." + questionIndex + "&select=*"),
+                        "&round=eq." + questionIndex + "&select=*",
                 null
         ));
     }
@@ -1709,11 +1756,11 @@ public class MainActivity extends Activity {
             try {
                 JSONArray data = safeJsonArray(request(
                         "GET",
-                        api("/predictions?room_code=eq." +
+                        SUPABASE_URL + "/rest/v1/predictions?room_code=eq." +
                                 URLEncoder.encode(roomCode, "UTF-8") +
                                 "&round=eq." + questionIndex +
                                 "&predictor=eq." + URLEncoder.encode(playerName, "UTF-8") +
-                                "&select=*&limit=1"),
+                                "&select=*&limit=1",
                         null
                 ));
                 if (data.length() == 0) return;
@@ -1929,8 +1976,8 @@ public class MainActivity extends Activity {
             JSONObject update = new JSONObject();
             update.put("score", 0);
             update.put("ready", false);
-            request("PATCH", api("/players?player_id=eq." +
-                    URLEncoder.encode(id, "UTF-8")), update.toString());
+            request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
+                    URLEncoder.encode(id, "UTF-8"), update.toString());
         }
         score = 0;
     }
@@ -1938,22 +1985,22 @@ public class MainActivity extends Activity {
     private void updateMyScore() throws Exception {
         JSONObject update = new JSONObject();
         update.put("score", score);
-        request("PATCH", api("/players?player_id=eq." +
-                URLEncoder.encode(playerId, "UTF-8")), update.toString());
+        request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
+                URLEncoder.encode(playerId, "UTF-8"), update.toString());
     }
 
     private void setPlayerReady(boolean ready) throws Exception {
         JSONObject update = new JSONObject();
         update.put("ready", ready);
-        request("PATCH", api("/players?player_id=eq." +
-                URLEncoder.encode(playerId, "UTF-8")), update.toString());
+        request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
+                URLEncoder.encode(playerId, "UTF-8"), update.toString());
     }
 
     private void setAllReady(boolean ready) throws Exception {
         JSONObject update = new JSONObject();
         update.put("ready", ready);
-        request("PATCH", api("/players?room_id=eq." +
-                URLEncoder.encode(roomId, "UTF-8")), update.toString());
+        request("PATCH", SUPABASE_URL + "/rest/v1/players?room_id=eq." +
+                URLEncoder.encode(roomId, "UTF-8"), update.toString());
     }
 
     private void leaveRoom() {
@@ -1968,16 +2015,16 @@ public class MainActivity extends Activity {
                         if (!id.equals(playerId) && !id.isEmpty()) {
                             JSONObject update = new JSONObject();
                             update.put("is_host", true);
-                            request("PATCH", api("/players?player_id=eq." +
-                                    URLEncoder.encode(id, "UTF-8")), update.toString());
+                            request("PATCH", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
+                                    URLEncoder.encode(id, "UTF-8"), update.toString());
                             break;
                         }
                     }
                 }
 
                 if (!playerId.isEmpty()) {
-                    request("DELETE", api("/players?player_id=eq." +
-                            URLEncoder.encode(playerId, "UTF-8")), null);
+                    request("DELETE", SUPABASE_URL + "/rest/v1/players?player_id=eq." +
+                            URLEncoder.encode(playerId, "UTF-8"), null);
                 }
 
                 runOnUiThread(() -> {
@@ -2009,9 +2056,9 @@ public class MainActivity extends Activity {
     private JSONObject getGameState() throws Exception {
         JSONArray data = safeJsonArray(request(
                 "GET",
-                api("/game_state?room_code=eq." +
+                SUPABASE_URL + "/rest/v1/game_state?room_code=eq." +
                         URLEncoder.encode(roomCode, "UTF-8") +
-                        "&select=*&limit=1"),
+                        "&select=*&limit=1",
                 null
         ));
         if (data.length() == 0) throw new Exception("game state not found");
@@ -2023,15 +2070,15 @@ public class MainActivity extends Activity {
         update.put("question_index", index);
         update.put("status", status);
         update.put("updated_at", getCurrentTimestamp());
-        request("PATCH", api("/game_state?room_code=eq." +
-                URLEncoder.encode(roomCode, "UTF-8")), update.toString());
+        request("PATCH", SUPABASE_URL + "/rest/v1/game_state?room_code=eq." +
+                URLEncoder.encode(roomCode, "UTF-8"), update.toString());
     }
 
     private void setRoomStatus(String status) throws Exception {
         JSONObject update = new JSONObject();
         update.put("status", status);
-        request("PATCH", api("/rooms?id=eq." +
-                URLEncoder.encode(roomId, "UTF-8")), update.toString());
+        request("PATCH", SUPABASE_URL + "/rest/v1/rooms?id=eq." +
+                URLEncoder.encode(roomId, "UTF-8"), update.toString());
     }
 
     private String getCurrentTimestamp() {
@@ -2072,7 +2119,7 @@ public class MainActivity extends Activity {
                     object.put("room_id", roomId);
                     object.put("player_name", playerName);
                     object.put("message", text);
-                    request("POST", api("/messages"), object.toString());
+                    request("POST", SUPABASE_URL + "/rest/v1/messages", object.toString());
                     runOnUiThread(() -> {
                         if (!isScreen(token, "chat")) return;
                         message.setText("");
@@ -2104,9 +2151,9 @@ public class MainActivity extends Activity {
             try {
                 JSONArray data = safeJsonArray(request(
                         "GET",
-                        api("/messages?room_id=eq." +
+                        SUPABASE_URL + "/rest/v1/messages?room_id=eq." +
                                 URLEncoder.encode(roomId, "UTF-8") +
-                                "&select=*&order=created_at.desc&limit=50"),
+                                "&select=*&order=created_at.desc&limit=50",
                         null
                 ));
 
@@ -2267,23 +2314,6 @@ public class MainActivity extends Activity {
                 SUPABASE_KEY.contains("${") || SUPABASE_KEY.contains("null")) {
             throw new Exception("SUPABASE_KEY غير مضبوط في BuildConfig");
         }
-    }
-
-    /** Builds a Supabase REST URL and prevents /rest/v1/rest/v1/... */
-    private String api(String path) throws Exception {
-        validateSupabase();
-        String base = SUPABASE_URL.trim();
-        while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        String suffix = "/rest/v1";
-        if (base.length() >= suffix.length() &&
-                base.regionMatches(true, base.length() - suffix.length(), suffix, 0, suffix.length())) {
-            base = base.substring(0, base.length() - suffix.length());
-            while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        }
-        if (path == null || path.trim().isEmpty()) throw new Exception("مسار Supabase فارغ");
-        String clean = path.trim();
-        if (!clean.startsWith("/")) clean = "/" + clean;
-        return base + "/rest/v1" + clean;
     }
 
     private String request(String method, String urlString, String body) throws Exception {
