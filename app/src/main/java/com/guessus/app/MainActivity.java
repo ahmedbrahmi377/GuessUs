@@ -50,11 +50,9 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -64,18 +62,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MainActivity extends Activity {
 
     // ============================================================
-    // CONSTANTS
+    // CONFIG
     // ============================================================
-
-    private final String SUPABASE_URL = BuildConfig.SUPABASE_URL;
-    private final String SUPABASE_KEY = BuildConfig.SUPABASE_KEY;
 
     private static final int MAX_PLAYERS = 2;
     private static final int ANSWER_TIME = 45;
+
     private static final int MAX_NAME_LENGTH = 18;
     private static final int MAX_ANSWER_LENGTH = 300;
     private static final int MAX_MESSAGE_LENGTH = 240;
-    private static final int MAX_ROOM_CREATION_RETRIES = 3;
+
+    private static final int MAX_ROOM_CREATION_RETRIES = 5;
     private static final long RETRY_DELAY_MS = 300L;
 
     private static final long POLL_LOBBY = 2200L;
@@ -85,17 +82,21 @@ public class MainActivity extends Activity {
     private static final int NETWORK_TIMEOUT = 10000;
     private static final int READ_TIMEOUT = 15000;
 
+    private final String SUPABASE_KEY = BuildConfig.SUPABASE_KEY;
+
     // ============================================================
-    // STATE - PLAYER & ROOM
+    // PLAYER / ROOM STATE
     // ============================================================
 
     private String roomCode = "";
     private String roomId = "";
+
     private String playerName = "";
     private String playerId = "";
 
     private int score = 0;
     private int questionIndex = 0;
+
     private boolean isHost = false;
 
     private boolean answerSent = false;
@@ -105,16 +106,20 @@ public class MainActivity extends Activity {
     private String currentScreen = "";
     private int screenToken = 0;
 
-    // Prevent duplicates
+    // ============================================================
+    // DUPLICATE PROTECTION
+    // ============================================================
+
     private final Set<String> submittedAnswerKeys = new HashSet<>();
     private final Set<String> submittedPredictionKeys = new HashSet<>();
     private final Set<String> submittedMessageKeys = new HashSet<>();
 
     // ============================================================
-    // SETTINGS & THEME
+    // SETTINGS
     // ============================================================
 
     private SharedPreferences prefs;
+
     private boolean darkMode;
     private boolean musicEnabled;
     private boolean soundEnabled;
@@ -144,19 +149,26 @@ public class MainActivity extends Activity {
     private boolean timeUpLoaded;
 
     // ============================================================
-    // ASYNC & THREADING
+    // ASYNC
     // ============================================================
 
     private CountDownTimer answerTimer;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService networkExecutor = Executors.newFixedThreadPool(2);
-    private final AtomicBoolean pollBusy = new AtomicBoolean(false);
+
+    private final Handler mainHandler =
+            new Handler(Looper.getMainLooper());
+
+    private final ExecutorService networkExecutor =
+            Executors.newFixedThreadPool(3);
+
+    private final AtomicBoolean pollBusy =
+            new AtomicBoolean(false);
 
     // ============================================================
-    // QUESTIONS (50 سؤال)
+    // QUESTIONS
     // ============================================================
 
     private final String[] questions = {
+
             "شنو أكثر حاجة تفرحك؟",
             "شنو أكثر حاجة تزعجك؟",
             "شنو أكثر أكلة تحبها؟",
@@ -167,6 +179,7 @@ public class MainActivity extends Activity {
             "شنو أكثر مادة تحبها؟",
             "شنو أكثر مادة ما تحبهاش؟",
             "شنو أكثر مكان تحب تمشي له؟",
+
             "لو تربح مليون، شنو أول حاجة تعملها؟",
             "شنو أكثر حاجة تخاف منها؟",
             "شنو أكثر عادة عندك؟",
@@ -177,6 +190,7 @@ public class MainActivity extends Activity {
             "شنو أكثر حيوان تحبه؟",
             "شنو أكثر فصل تحبه؟",
             "شنو أكثر وقت في النهار تحبه؟",
+
             "شنو الحاجة اللي مستحيل تستغنى عليها؟",
             "شنو أكثر حاجة تضحكك؟",
             "شنو أكثر موقف محرج صارلك؟",
@@ -187,6 +201,7 @@ public class MainActivity extends Activity {
             "شنو أكثر شيء تتمنى يتغير؟",
             "شنو أكثر شيء تحب تتعلمه؟",
             "شنو أكثر ذكرى تحبها؟",
+
             "لو تنجم تختار قوة خارقة، شنو تختار؟",
             "لو تعيش في عالم لعبة، شنو تختار؟",
             "لو ترجع للماضي، شنو تبدل؟",
@@ -197,6 +212,7 @@ public class MainActivity extends Activity {
             "شنو أكثر كلمة تستعملها؟",
             "شنو أكثر شيء يخليك متوتر؟",
             "شنو أكثر شيء يعطيك طاقة؟",
+
             "شنو أكثر موقف تتذكره من طفولتك؟",
             "شنو أكثر مكان ترتاح فيه؟",
             "شنو أكثر شيء تحب في شخصيتك؟",
@@ -217,7 +233,11 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        prefs = getSharedPreferences("guessus_settings", MODE_PRIVATE);
+        prefs = getSharedPreferences(
+                "guessus_settings",
+                MODE_PRIVATE
+        );
+
         darkMode = prefs.getBoolean("dark_mode", false);
         musicEnabled = prefs.getBoolean("music_enabled", true);
         soundEnabled = prefs.getBoolean("sound_enabled", true);
@@ -225,20 +245,28 @@ public class MainActivity extends Activity {
         setupTheme();
         loadOrCreatePlayerId();
         initAudio();
+
         showHome();
     }
 
     private void loadOrCreatePlayerId() {
+
         playerId = prefs.getString("player_id", "");
+
         if (playerId == null || playerId.trim().isEmpty()) {
+
             playerId = UUID.randomUUID().toString();
-            prefs.edit().putString("player_id", playerId).apply();
+
+            prefs.edit()
+                    .putString("player_id", playerId)
+                    .apply();
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+
         if (musicEnabled && "home".equals(currentScreen)) {
             startMusic();
         }
@@ -252,16 +280,21 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+
         stopAllPolling();
         stopTimer();
+
         releaseMusic();
         releaseAudioEffects();
+
         networkExecutor.shutdownNow();
+
         super.onDestroy();
     }
 
     @Override
     public void onBackPressed() {
+
         if ("home".equals(currentScreen)) {
             super.onBackPressed();
             return;
@@ -273,40 +306,121 @@ public class MainActivity extends Activity {
         }
 
         if ("chat".equals(currentScreen)) {
+
             if (!roomCode.isEmpty()) {
                 showLobby();
             } else {
                 showHome();
             }
+
             return;
         }
 
         if (!roomCode.isEmpty()) {
+
             if ("lobby".equals(currentScreen)) {
                 leaveRoom();
+
             } else if ("leaderboard".equals(currentScreen)) {
                 showHome();
+
             } else {
                 showLobby();
             }
+
         } else {
             showHome();
         }
     }
 
     // ============================================================
-    // THEME & COLORS
+    // SUPABASE URL
+    // ============================================================
+
+    /**
+     * يرجع رابط Supabase الأساسي بشكل آمن.
+     *
+     * يقبل:
+     * https://xxxxx.supabase.co
+     * https://xxxxx.supabase.co/
+     * وحتى إذا وضع المستخدم /rest/v1 بالخطأ.
+     */
+    private String getSupabaseBaseUrl() {
+
+        String url = BuildConfig.SUPABASE_URL;
+
+        if (url == null) {
+            return "";
+        }
+
+        url = url.trim();
+
+        while (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+
+        String restPath = "/rest/v1";
+
+        if (url.endsWith(restPath)) {
+            url = url.substring(
+                    0,
+                    url.length() - restPath.length()
+            );
+        }
+
+        while (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+
+        return url;
+    }
+
+    private String restUrl(String path) throws Exception {
+
+        validateSupabase();
+
+        if (path == null || path.trim().isEmpty()) {
+            throw new Exception("مسار الطلب غير صحيح");
+        }
+
+        String cleanPath = path.trim();
+
+        if (!cleanPath.startsWith("/")) {
+            cleanPath = "/" + cleanPath;
+        }
+
+        return getSupabaseBaseUrl() + cleanPath;
+    }
+
+    private String encode(String value) throws Exception {
+
+        if (value == null) {
+            return "";
+        }
+
+        return URLEncoder.encode(
+                value,
+                StandardCharsets.UTF_8.name()
+        );
+    }
+
+    // ============================================================
+    // THEME
     // ============================================================
 
     private void setupTheme() {
+
         if (darkMode) {
+
             bgColor = Color.rgb(11, 9, 20);
             cardColor = Color.rgb(28, 23, 43);
             textColor = Color.WHITE;
             secondaryTextColor = Color.rgb(195, 187, 215);
             accentColor = Color.rgb(150, 82, 240);
             buttonTextColor = Color.WHITE;
+
         } else {
+
             bgColor = Color.rgb(245, 240, 255);
             cardColor = Color.WHITE;
             textColor = Color.rgb(35, 25, 50);
@@ -316,42 +430,75 @@ public class MainActivity extends Activity {
         }
 
         Window window = getWindow();
+
         if (window != null) {
+
             window.setStatusBarColor(bgColor);
+
             if (Build.VERSION.SDK_INT >= 27) {
                 window.setNavigationBarColor(bgColor);
             }
 
-            int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+            int flags =
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+
             if (!darkMode) {
+
                 flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+
                 if (Build.VERSION.SDK_INT >= 26) {
                     flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
                 }
             }
-            window.getDecorView().setSystemUiVisibility(flags);
+
+            window.getDecorView()
+                    .setSystemUiVisibility(flags);
         }
     }
 
     private void toggleDarkMode() {
+
         darkMode = !darkMode;
-        prefs.edit().putBoolean("dark_mode", darkMode).apply();
+
+        prefs.edit()
+                .putBoolean("dark_mode", darkMode)
+                .apply();
+
         setupTheme();
         showSettings();
     }
 
     private void toggleMusic() {
+
         musicEnabled = !musicEnabled;
-        prefs.edit().putBoolean("music_enabled", musicEnabled).apply();
-        if (musicEnabled) startMusic(); else stopMusic();
+
+        prefs.edit()
+                .putBoolean("music_enabled", musicEnabled)
+                .apply();
+
+        if (musicEnabled) {
+            startMusic();
+        } else {
+            stopMusic();
+        }
+
         showSettings();
     }
 
     private void toggleSound() {
+
         soundEnabled = !soundEnabled;
-        prefs.edit().putBoolean("sound_enabled", soundEnabled).apply();
+
+        prefs.edit()
+                .putBoolean("sound_enabled", soundEnabled)
+                .apply();
+
         showSettings();
-        if (soundEnabled) playClick();
+
+        if (soundEnabled) {
+            playClick();
+        }
     }
 
     // ============================================================
@@ -359,38 +506,85 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void initAudio() {
+
         try {
-            AudioAttributes attrs = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_GAME)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build();
 
-            soundPool = new SoundPool.Builder()
-                    .setAudioAttributes(attrs)
-                    .setMaxStreams(4)
-                    .build();
+            AudioAttributes attrs =
+                    new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .setContentType(
+                                    AudioAttributes.CONTENT_TYPE_SONIFICATION
+                            )
+                            .build();
 
-            soundPool.setOnLoadCompleteListener((pool, sampleId, status) -> {
-                if (status != 0) return;
-                if (sampleId == clickSoundId) clickLoaded = true;
-                else if (sampleId == successSoundId) successLoaded = true;
-                else if (sampleId == wrongSoundId) wrongLoaded = true;
-                else if (sampleId == timeUpSoundId) timeUpLoaded = true;
-            });
+            soundPool =
+                    new SoundPool.Builder()
+                            .setAudioAttributes(attrs)
+                            .setMaxStreams(4)
+                            .build();
 
-            clickSoundId = soundPool.load(this, R.raw.click, 1);
-            successSoundId = soundPool.load(this, R.raw.success, 1);
-            wrongSoundId = soundPool.load(this, R.raw.wrong, 1);
-            timeUpSoundId = soundPool.load(this, R.raw.time_up, 1);
+            soundPool.setOnLoadCompleteListener(
+                    (pool, sampleId, status) -> {
+
+                        if (status != 0) return;
+
+                        if (sampleId == clickSoundId) {
+                            clickLoaded = true;
+
+                        } else if (sampleId == successSoundId) {
+                            successLoaded = true;
+
+                        } else if (sampleId == wrongSoundId) {
+                            wrongLoaded = true;
+
+                        } else if (sampleId == timeUpSoundId) {
+                            timeUpLoaded = true;
+                        }
+                    }
+            );
+
+            clickSoundId =
+                    soundPool.load(this, R.raw.click, 1);
+
+            successSoundId =
+                    soundPool.load(this, R.raw.success, 1);
+
+            wrongSoundId =
+                    soundPool.load(this, R.raw.wrong, 1);
+
+            timeUpSoundId =
+                    soundPool.load(this, R.raw.time_up, 1);
+
         } catch (Exception e) {
+
             soundPool = null;
         }
     }
 
-    private void playSound(int soundId, boolean loaded, float volume) {
-        if (!soundEnabled || soundPool == null || soundId == 0 || !loaded) return;
+    private void playSound(
+            int soundId,
+            boolean loaded,
+            float volume
+    ) {
+
+        if (!soundEnabled ||
+                soundPool == null ||
+                soundId == 0 ||
+                !loaded) {
+            return;
+        }
+
         try {
-            soundPool.play(soundId, volume, volume, 1, 0, 1.0f);
+
+            soundPool.play(
+                    soundId,
+                    volume,
+                    volume,
+                    1,
+                    0,
+                    1.0f
+            );
+
         } catch (Exception ignored) {
         }
     }
@@ -412,201 +606,377 @@ public class MainActivity extends Activity {
     }
 
     private void startMusic() {
+
         if (!musicEnabled) return;
+
         try {
+
             if (musicPlayer == null) {
-                musicPlayer = MediaPlayer.create(this, R.raw.bg_music);
-                if (musicPlayer == null) return;
+
+                musicPlayer =
+                        MediaPlayer.create(
+                                this,
+                                R.raw.bg_music
+                        );
+
+                if (musicPlayer == null) {
+                    return;
+                }
+
                 musicPlayer.setLooping(true);
                 musicPlayer.setVolume(0.25f, 0.25f);
             }
+
             if (!musicPlayer.isPlaying()) {
                 musicPlayer.start();
             }
+
         } catch (Exception ignored) {
         }
     }
 
     private void pauseMusic() {
+
         try {
-            if (musicPlayer != null && musicPlayer.isPlaying()) {
+
+            if (musicPlayer != null &&
+                    musicPlayer.isPlaying()) {
+
                 musicPlayer.pause();
             }
+
         } catch (Exception ignored) {
         }
     }
 
     private void stopMusic() {
+
         try {
+
             if (musicPlayer != null) {
+
                 if (musicPlayer.isPlaying()) {
                     musicPlayer.stop();
                 }
+
                 musicPlayer.release();
                 musicPlayer = null;
             }
+
         } catch (Exception ignored) {
+
             musicPlayer = null;
         }
     }
 
     private void releaseMusic() {
-        try {
-            stopMusic();
-        } catch (Exception ignored) {
-        }
+        stopMusic();
     }
 
     private void releaseAudioEffects() {
+
         try {
+
             if (soundPool != null) {
+
                 soundPool.release();
                 soundPool = null;
             }
+
         } catch (Exception ignored) {
         }
     }
 
     // ============================================================
-    // POLLING & SCREEN MANAGEMENT
+    // POLLING
     // ============================================================
 
     private void stopAllPolling() {
+
         screenToken++;
+
         mainHandler.removeCallbacksAndMessages(null);
+
         pollBusy.set(false);
     }
 
     private int beginScreen(String name) {
+
         stopAllPolling();
+
         currentScreen = name;
+
         return screenToken;
     }
 
-    private boolean isScreen(int token, String name) {
-        return token == screenToken && name.equals(currentScreen) && !isFinishing();
+    private boolean isScreen(
+            int token,
+            String name
+    ) {
+
+        return token == screenToken &&
+                name.equals(currentScreen) &&
+                !isFinishing();
     }
 
-    private void schedulePolling(Runnable runnable, long delay, int token, String name) {
-        mainHandler.postDelayed(() -> {
-            if (isScreen(token, name)) {
-                runnable.run();
-            }
-        }, delay);
+    private void schedulePolling(
+            Runnable runnable,
+            long delay,
+            int token,
+            String name
+    ) {
+
+        mainHandler.postDelayed(
+                () -> {
+
+                    if (isScreen(token, name)) {
+                        runnable.run();
+                    }
+                },
+                delay
+        );
     }
 
     // ============================================================
-    // TEXT UTILITIES
+    // UTILITIES
     // ============================================================
 
-    private String cleanText(String value, int maxLength) {
-        if (value == null || maxLength <= 0) return "";
-        String text = value.replace("\u0000", "").trim().replaceAll("\\s+", " ");
-        if (text.length() > maxLength) {
-            text = text.substring(0, maxLength).trim();
+    private int dp(int value) {
+
+        return (int) (
+                value *
+                        getResources()
+                                .getDisplayMetrics()
+                                .density
+                        + 0.5f
+        );
+    }
+
+    private String cleanText(
+            String value,
+            int maxLength
+    ) {
+
+        if (value == null || maxLength <= 0) {
+            return "";
         }
+
+        String text =
+                value
+                        .replace("\u0000", "")
+                        .trim()
+                        .replaceAll("\\s+", " ");
+
+        if (text.length() > maxLength) {
+            text =
+                    text.substring(0, maxLength)
+                            .trim();
+        }
+
         return text;
     }
 
     private boolean isValidRoomCode(String code) {
-        return code != null && code.matches("\\d{4}");
+
+        return code != null &&
+                code.matches("\\d{4}");
     }
 
-    private String safeMessage(Exception e, String fallback) {
-        if (e == null) return fallback;
-        String message = e.getMessage();
-        if (message == null || message.trim().isEmpty()) return fallback;
-        if (message.length() > 200) message = message.substring(0, 200);
-        return message;
+    private void toast(String message) {
+
+        if (message == null ||
+                message.trim().isEmpty()) {
+            return;
+        }
+
+        Toast.makeText(
+                this,
+                message,
+                Toast.LENGTH_SHORT
+        ).show();
+    }
+
+    private void setBusy(
+            Button button,
+            boolean busy,
+            String busyText,
+            String normalText
+    ) {
+
+        if (button == null) return;
+
+        button.setEnabled(!busy);
+        button.setAlpha(busy ? 0.65f : 1f);
+        button.setText(
+                busy ? busyText : normalText
+        );
     }
 
     // ============================================================
-    // UI UTILITIES
+    // UI
     // ============================================================
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
-    }
 
     private LinearLayout root() {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(18), dp(18), dp(18), dp(24));
+
+        LinearLayout layout =
+                new LinearLayout(this);
+
+        layout.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        layout.setPadding(
+                dp(18),
+                dp(18),
+                dp(18),
+                dp(24)
+        );
+
         layout.setBackgroundColor(bgColor);
+
         return layout;
     }
 
     private ScrollView scroll(View child) {
-        ScrollView scroll = new ScrollView(this);
+
+        ScrollView scroll =
+                new ScrollView(this);
+
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         scroll.setPadding(0, 0, 0, dp(8));
+
         scroll.addView(child);
+
         return scroll;
     }
 
-    private void applyBackground(LinearLayout root, String drawableName) {
+    private void applyBackground(
+            LinearLayout root,
+            String drawableName
+    ) {
+
         try {
-            int id = getResources().getIdentifier(drawableName, "drawable", getPackageName());
+
+            int id =
+                    getResources().getIdentifier(
+                            drawableName,
+                            "drawable",
+                            getPackageName()
+                    );
+
             if (id != 0) {
                 root.setBackgroundResource(id);
             }
+
         } catch (Exception ignored) {
         }
     }
 
     private TextView title(String text) {
+
         TextView tv = new TextView(this);
+
         tv.setText(text);
         tv.setTextColor(textColor);
         tv.setTextSize(29);
         tv.setGravity(Gravity.CENTER);
         tv.setTypeface(null, Typeface.BOLD);
-        tv.setPadding(0, dp(13), 0, dp(14));
+
+        tv.setPadding(
+                0,
+                dp(13),
+                0,
+                dp(14)
+        );
+
         return tv;
     }
 
     private TextView subtitle(String text) {
+
         TextView tv = new TextView(this);
+
         tv.setText(text);
         tv.setTextColor(secondaryTextColor);
         tv.setTextSize(15);
         tv.setGravity(Gravity.CENTER);
-        tv.setPadding(dp(8), dp(4), dp(8), dp(12));
+
+        tv.setPadding(
+                dp(8),
+                dp(4),
+                dp(8),
+                dp(12)
+        );
+
         return tv;
     }
 
     private TextView label(String text) {
+
         TextView tv = new TextView(this);
+
         tv.setText(text);
         tv.setTextColor(textColor);
         tv.setTextSize(16);
         tv.setTypeface(null, Typeface.BOLD);
-        tv.setPadding(dp(4), dp(8), dp(4), dp(7));
+
+        tv.setPadding(
+                dp(4),
+                dp(8),
+                dp(4),
+                dp(7)
+        );
+
         return tv;
     }
 
     private LinearLayout card() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(16), dp(18), dp(16));
 
-        GradientDrawable drawable = new GradientDrawable();
+        LinearLayout card =
+                new LinearLayout(this);
+
+        card.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        card.setPadding(
+                dp(18),
+                dp(16),
+                dp(18),
+                dp(16)
+        );
+
+        GradientDrawable drawable =
+                new GradientDrawable();
+
         drawable.setColor(cardColor);
         drawable.setCornerRadius(dp(22));
+
         card.setBackground(drawable);
 
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+
+        params.setMargins(
+                0,
+                dp(7),
+                0,
+                dp(7)
         );
-        params.setMargins(0, dp(7), 0, dp(7));
+
         card.setLayoutParams(params);
+
         return card;
     }
 
     private Button button(String text) {
+
         Button b = new Button(this);
+
         b.setText(text);
         b.setTextSize(16);
         b.setTextColor(buttonTextColor);
@@ -615,377 +985,965 @@ public class MainActivity extends Activity {
         b.setMinHeight(0);
         b.setStateListAnimator(null);
 
-        GradientDrawable drawable = new GradientDrawable();
+        GradientDrawable drawable =
+                new GradientDrawable();
+
         drawable.setColor(accentColor);
         drawable.setCornerRadius(dp(17));
+
         b.setBackground(drawable);
 
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(56)
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(56)
+                );
+
+        params.setMargins(
+                0,
+                dp(6),
+                0,
+                dp(6)
         );
-        params.setMargins(0, dp(6), 0, dp(6));
+
         b.setLayoutParams(params);
-        b.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                playClick();
-            }
-            return false;
-        });
+
+        b.setOnTouchListener(
+                (v, event) -> {
+
+                    if (event.getAction() ==
+                            MotionEvent.ACTION_DOWN) {
+
+                        playClick();
+                    }
+
+                    return false;
+                }
+        );
+
         return b;
     }
 
     private EditText input(String hint) {
+
         EditText e = new EditText(this);
+
         e.setHint(hint);
-        e.setHintTextColor(secondaryTextColor);
+        e.setHintTextColor(
+                secondaryTextColor
+        );
+
         e.setTextColor(textColor);
         e.setTextSize(16);
         e.setSingleLine(true);
-        e.setPadding(dp(15), 0, dp(15), 0);
 
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(darkMode ? Color.rgb(41, 34, 59) : Color.rgb(242, 238, 249));
+        e.setPadding(
+                dp(15),
+                0,
+                dp(15),
+                0
+        );
+
+        GradientDrawable drawable =
+                new GradientDrawable();
+
+        drawable.setColor(
+                darkMode
+                        ? Color.rgb(41, 34, 59)
+                        : Color.rgb(242, 238, 249)
+        );
+
         drawable.setCornerRadius(dp(15));
+
         e.setBackground(drawable);
 
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(55)
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(55)
+                );
+
+        params.setMargins(
+                0,
+                dp(6),
+                0,
+                dp(6)
         );
-        params.setMargins(0, dp(6), 0, dp(6));
+
         e.setLayoutParams(params);
+
         return e;
     }
 
-    private void setScreen(View view, String name) {
+    private void setScreen(
+            View view,
+            String name
+    ) {
+
         currentScreen = name;
+
         setContentView(view);
+
         view.setAlpha(0f);
-        view.animate().alpha(1f).setDuration(220).start();
-    }
 
-    private void toast(String message) {
-        if (message == null || message.trim().isEmpty()) return;
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private void setBusy(Button button, boolean busy, String busyText, String normalText) {
-        if (button == null) return;
-        button.setEnabled(!busy);
-        button.setAlpha(busy ? 0.65f : 1f);
-        button.setText(busy ? busyText : normalText);
+        view.animate()
+                .alpha(1f)
+                .setDuration(220)
+                .start();
     }
 
     // ============================================================
-    // HOME SCREEN
+    // HOME
     // ============================================================
 
     private void showHome() {
+
         stopTimer();
+
         int token = beginScreen("home");
 
         LinearLayout root = root();
-        applyBackground(root, "bg_home");
 
-        TextView logo = title("GuessUs");
+        applyBackground(
+                root,
+                "bg_home"
+        );
+
+        TextView logo =
+                title("GuessUs");
+
         logo.setTextColor(Color.WHITE);
         logo.setTextSize(44);
-        root.addView(logo, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(165)
-        ));
 
-        TextView info = subtitle("توقّع إجابات صاحبك وشوف شكون يعرف شكون أكثر 🎯");
+        root.addView(
+                logo,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(165)
+                )
+        );
+
+        TextView info =
+                subtitle(
+                        "توقّع إجابات صاحبك وشوف شكون يعرف شكون أكثر 🎯"
+                );
+
         info.setTextColor(Color.WHITE);
         info.setTextSize(16);
+
         root.addView(info);
 
-        Button create = button("🎮 إنشاء غرفة");
-        create.setOnClickListener(v -> showCreateRoom());
+        Button create =
+                button("🎮 إنشاء غرفة");
+
+        create.setOnClickListener(
+                v -> showCreateRoom()
+        );
+
         root.addView(create);
 
-        Button join = button("🚪 الانضمام لغرفة");
-        join.setOnClickListener(v -> showJoinRoom());
+        Button join =
+                button("🚪 الانضمام لغرفة");
+
+        join.setOnClickListener(
+                v -> showJoinRoom()
+        );
+
         root.addView(join);
 
-        Button settings = button("⚙️ الإعدادات");
-        settings.setOnClickListener(v -> showSettings());
+        Button settings =
+                button("⚙️ الإعدادات");
+
+        settings.setOnClickListener(
+                v -> showSettings()
+        );
+
         root.addView(settings);
 
-        TextView features = subtitle("👥 لاعبان • 🎯 توقع • 💬 Chat • 🏆 نقاط • 🎵 موسيقى");
+        TextView features =
+                subtitle(
+                        "👥 لاعبان • 🎯 توقع • 💬 Chat • 🏆 نقاط • 🎵 موسيقى"
+                );
+
         features.setTextColor(Color.WHITE);
+
         root.addView(features);
 
-        TextView version = subtitle("GuessUs • Online Party Game");
+        TextView version =
+                subtitle(
+                        "GuessUs • Online Party Game"
+                );
+
         version.setTextColor(Color.WHITE);
+
         root.addView(version);
 
-        setScreen(scroll(root), "home");
-        if (musicEnabled && token == screenToken) {
+        setScreen(
+                scroll(root),
+                "home"
+        );
+
+        if (musicEnabled &&
+                token == screenToken) {
+
             startMusic();
         }
     }
 
     // ============================================================
-    // CREATE ROOM - IMPROVED SYSTEM
+    // CREATE ROOM
     // ============================================================
 
     private void showCreateRoom() {
-        int token = beginScreen("create");
+
+        int token =
+                beginScreen("create");
+
         LinearLayout root = root();
 
-        root.addView(title("إنشاء غرفة 🎮"));
-        root.addView(subtitle("أنت الـHost. ادخل اسمك ثم شارك الكود مع صاحبك."));
+        root.addView(
+                title("إنشاء غرفة 🎮")
+        );
 
-        EditText name = input("اسمك");
-        name.setFilters(new InputFilter[]{new InputFilter.LengthFilter(MAX_NAME_LENGTH)});
+        root.addView(
+                subtitle(
+                        "أنت الـHost. ادخل اسمك ثم شارك الكود مع صاحبك."
+                )
+        );
+
+        EditText name =
+                input("اسمك");
+
+        name.setFilters(
+                new InputFilter[]{
+                        new InputFilter.LengthFilter(
+                                MAX_NAME_LENGTH
+                        )
+                }
+        );
+
         root.addView(name);
 
-        Button create = button("✨ إنشاء الغرفة");
+        Button create =
+                button("✨ إنشاء الغرفة");
+
         root.addView(create);
 
         create.setOnClickListener(v -> {
-            String n = cleanText(name.getText().toString(), MAX_NAME_LENGTH);
+
+            String n =
+                    cleanText(
+                            name.getText().toString(),
+                            MAX_NAME_LENGTH
+                    );
+
             if (n.isEmpty()) {
                 toast("اكتب اسمك أولاً");
                 return;
             }
 
             playerName = n;
-            setBusy(create, true, "⏳ جاري الإنشاء...", "✨ إنشاء الغرفة");
 
-            networkExecutor.execute(() -> createRoomProcess(create, token));
+            setBusy(
+                    create,
+                    true,
+                    "⏳ جاري الإنشاء...",
+                    "✨ إنشاء الغرفة"
+            );
+
+            networkExecutor.execute(
+                    () -> createRoomProcess(
+                            create,
+                            token
+                    )
+            );
         });
 
-        Button back = button("رجوع");
-        back.setOnClickListener(v -> showHome());
+        Button back =
+                button("رجوع");
+
+        back.setOnClickListener(
+                v -> showHome()
+        );
+
         root.addView(back);
 
-        setScreen(scroll(root), "create");
+        setScreen(
+                scroll(root),
+                "create"
+        );
     }
 
-    private void createRoomProcess(Button createBtn, int token) {
+    private void createRoomProcess(
+            Button createBtn,
+            int token
+    ) {
+
+        String createdRoomId = "";
+        String createdRoomCode = "";
+
         try {
+
             validateSupabase();
-            playerName = cleanText(playerName, MAX_NAME_LENGTH);
-            if (playerName.isEmpty()) throw new Exception("اسم اللاعب غير صالح");
 
-            String createdCode = "";
-            String createdRoomId = "";
+            playerName =
+                    cleanText(
+                            playerName,
+                            MAX_NAME_LENGTH
+                    );
 
-            // حاول إنشاء غرفة 3 مرات (كود مختلف كل مرة إذا كان هناك تعارض)
-            for (int attempt = 0; attempt < MAX_ROOM_CREATION_RETRIES; attempt++) {
-                String code = generateRoomCode();
-
-                // إنشاء الغرفة
-                JSONObject roomData = new JSONObject();
-                roomData.put("code", code);
-                roomData.put("status", "waiting");
-                roomData.put("created_at", getCurrentTimestamp());
-
-                try {
-                    String response = request("POST", 
-                            SUPABASE_URL + "/rest/v1/rooms",
-                            roomData.toString(),
-                            true); // return=representation
-
-                    JSONArray result = safeJsonArray(response);
-                    if (result.length() > 0) {
-                        JSONObject room = result.getJSONObject(0);
-                        createdRoomId = room.optString("id", "");
-                        createdCode = room.optString("code", code);
-                        break;
-                    }
-                } catch (HttpException e) {
-                    if (e.statusCode == 409) {
-                        // تعارض (الكود موجود)، حاول كود آخر
-                        if (attempt < MAX_ROOM_CREATION_RETRIES - 1) {
-                            Thread.sleep(RETRY_DELAY_MS);
-                        }
-                        continue;
-                    } else {
-                        throw e;
-                    }
-                }
+            if (playerName.isEmpty()) {
+                throw new Exception(
+                        "اسم اللاعب غير صالح"
+                );
             }
 
-            if (createdRoomId.isEmpty()) {
-                throw new Exception("فشل إنشاء الغرفة: لم نحصل على معرّف صحيح");
+            boolean created = false;
+
+            for (int attempt = 0;
+                 attempt < MAX_ROOM_CREATION_RETRIES;
+                 attempt++) {
+
+                String code =
+                        generateRoomCode();
+
+                JSONObject room =
+                        new JSONObject();
+
+                room.put(
+                        "code",
+                        code
+                );
+
+                room.put(
+                        "status",
+                        "waiting"
+                );
+
+                String response =
+                        request(
+                                "POST",
+                                restUrl("/rest/v1/rooms"),
+                                room.toString(),
+                                true
+                        );
+
+                JSONArray result =
+                        safeJsonArray(response);
+
+                if (result.length() > 0) {
+
+                    JSONObject created =
+                            result.getJSONObject(0);
+
+                    createdRoomId =
+                            created.optString(
+                                    "id",
+                                    ""
+                            );
+
+                    createdRoomCode =
+                            created.optString(
+                                    "code",
+                                    code
+                            );
+
+                    if (createdRoomId.isEmpty()) {
+
+                        createdRoomId =
+                                findRoomIdByCode(
+                                        createdRoomCode
+                                );
+                    }
+
+                    if (!createdRoomId.isEmpty()) {
+
+                        created = true;
+                        break;
+                    }
+                }
+
+            }
+
+            if (!created) {
+                throw new Exception(
+                        "تعذر إنشاء غرفة جديدة"
+                );
             }
 
             roomId = createdRoomId;
-            roomCode = createdCode;
+            roomCode = createdRoomCode;
+
             isHost = true;
             score = 0;
             questionIndex = 0;
-            submittedAnswerKeys.clear();
-            submittedPredictionKeys.clear();
-            submittedMessageKeys.clear();
 
-            // الآن إنشاء game_state
+            clearSubmissionMemory();
+
             createGameState();
 
-            // الآن إضافة اللاعب
-            addPlayer();
+            try {
+
+                addPlayer();
+
+            } catch (Exception playerError) {
+
+                cleanupCreatedRoom(
+                        createdRoomId,
+                        createdRoomCode
+                );
+
+                throw playerError;
+            }
 
             runOnUiThread(() -> {
-                if (!isScreen(token, "create")) return;
+
+                if (!isScreen(
+                        token,
+                        "create"
+                )) {
+                    return;
+                }
+
                 playSuccess();
+
                 showLobby();
             });
 
         } catch (Exception e) {
-            String errorMsg = extractSupabaseErrorMessage(e);
+
+            cleanupCreatedRoom(
+                    createdRoomId,
+                    createdRoomCode
+            );
+
+            String error =
+                    extractSupabaseErrorMessage(e);
+
             runOnUiThread(() -> {
-                if (!isScreen(token, "create")) return;
-                setBusy(createBtn, false, "⏳ جاري الإنشاء...", "✨ إنشاء الغرفة");
-                toast("خطأ: " + errorMsg);
+
+                if (!isScreen(
+                        token,
+                        "create"
+                )) {
+                    return;
+                }
+
+                setBusy(
+                        createBtn,
+                        false,
+                        "⏳ جاري الإنشاء...",
+                        "✨ إنشاء الغرفة"
+                );
+
+                toast(
+                        "خطأ: " + error
+                );
             });
         }
     }
 
     private String generateRoomCode() {
-        int value = 1000 + (int) (Math.random() * 9000);
+
+        int value =
+                1000 +
+                        (int)
+                                (Math.random() * 9000);
+
         return String.valueOf(value);
     }
 
-    private void createGameState() throws Exception {
-        JSONObject state = new JSONObject();
-        state.put("room_code", roomCode);
-        state.put("room_id", roomId);
-        state.put("question_index", 0);
-        state.put("status", "waiting");
-        state.put("updated_at", getCurrentTimestamp());
+    private String findRoomIdByCode(
+            String code
+    ) throws Exception {
 
-        request("POST",
-                SUPABASE_URL + "/rest/v1/game_state",
+        String query =
+                restUrl(
+                        "/rest/v1/rooms?code=eq."
+                                + encode(code)
+                                + "&select=id,code&limit=1"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
+        JSONArray data =
+                safeJsonArray(response);
+
+        if (data.length() == 0) {
+            return "";
+        }
+
+        return data.getJSONObject(0)
+                .optString("id", "");
+    }
+
+    private void createGameState()
+            throws Exception {
+
+        JSONObject state =
+                new JSONObject();
+
+        state.put(
+                "room_code",
+                roomCode
+        );
+
+        state.put(
+                "question_index",
+                0
+        );
+
+        state.put(
+                "status",
+                "waiting"
+        );
+
+        state.put(
+                "updated_at",
+                getCurrentTimestamp()
+        );
+
+        request(
+                "POST",
+                restUrl("/rest/v1/game_state"),
                 state.toString(),
-                false);
+                false
+        );
     }
 
     // ============================================================
-    // JOIN ROOM - IMPROVED SYSTEM
+    // CLEANUP
+    // ============================================================
+
+    private void cleanupCreatedRoom(
+            String createdRoomId,
+            String createdRoomCode
+    ) {
+
+        try {
+
+            if (createdRoomCode != null &&
+                    !createdRoomCode.isEmpty()) {
+
+                request(
+                        "DELETE",
+                        restUrl(
+                                "/rest/v1/game_state?room_code=eq."
+                                        + encode(createdRoomCode)
+                        ),
+                        null,
+                        false
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (createdRoomCode != null &&
+                    !createdRoomCode.isEmpty()) {
+
+                request(
+                        "DELETE",
+                        restUrl(
+                                "/rest/v1/round_answers?room_code=eq."
+                                        + encode(createdRoomCode)
+                        ),
+                        null,
+                        false
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (createdRoomCode != null &&
+                    !createdRoomCode.isEmpty()) {
+
+                request(
+                        "DELETE",
+                        restUrl(
+                                "/rest/v1/predictions?room_code=eq."
+                                        + encode(createdRoomCode)
+                        ),
+                        null,
+                        false
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (createdRoomId != null &&
+                    !createdRoomId.isEmpty()) {
+
+                request(
+                        "DELETE",
+                        restUrl(
+                                "/rest/v1/players?room_id=eq."
+                                        + encode(createdRoomId)
+                        ),
+                        null,
+                        false
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (createdRoomId != null &&
+                    !createdRoomId.isEmpty()) {
+
+                request(
+                        "DELETE",
+                        restUrl(
+                                "/rest/v1/rooms?id=eq."
+                                        + encode(createdRoomId)
+                        ),
+                        null,
+                        false
+                );
+
+            } else if (createdRoomCode != null &&
+                    !createdRoomCode.isEmpty()) {
+
+                request(
+                        "DELETE",
+                        restUrl(
+                                "/rest/v1/rooms?code=eq."
+                                        + encode(createdRoomCode)
+                        ),
+                        null,
+                        false
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // ============================================================
+    // JOIN ROOM
     // ============================================================
 
     private void showJoinRoom() {
-        int token = beginScreen("join");
+
+        int token =
+                beginScreen("join");
+
         LinearLayout root = root();
 
-        root.addView(title("الانضمام 🚪"));
-        root.addView(subtitle("ادخل اسمك وكود الغرفة المكوّن من 4 أرقام."));
+        root.addView(
+                title("الانضمام 🚪")
+        );
 
-        EditText name = input("اسمك");
-        name.setFilters(new InputFilter[]{new InputFilter.LengthFilter(MAX_NAME_LENGTH)});
+        root.addView(
+                subtitle(
+                        "ادخل اسمك وكود الغرفة المكوّن من 4 أرقام."
+                )
+        );
+
+        EditText name =
+                input("اسمك");
+
+        name.setFilters(
+                new InputFilter[]{
+                        new InputFilter.LengthFilter(
+                                MAX_NAME_LENGTH
+                        )
+                }
+        );
+
         root.addView(name);
 
-        EditText code = input("كود الغرفة - 4 أرقام");
-        code.setInputType(InputType.TYPE_CLASS_NUMBER);
-        code.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});
+        EditText code =
+                input("كود الغرفة - 4 أرقام");
+
+        code.setInputType(
+                InputType.TYPE_CLASS_NUMBER
+        );
+
+        code.setFilters(
+                new InputFilter[]{
+                        new InputFilter.LengthFilter(4)
+                }
+        );
+
         root.addView(code);
 
-        Button join = button("🚀 انضمام");
+        Button join =
+                button("🚀 انضمام");
+
         root.addView(join);
 
         join.setOnClickListener(v -> {
-            String n = cleanText(name.getText().toString(), MAX_NAME_LENGTH);
-            String c = code.getText().toString().trim();
+
+            String n =
+                    cleanText(
+                            name.getText().toString(),
+                            MAX_NAME_LENGTH
+                    );
+
+            String c =
+                    code.getText()
+                            .toString()
+                            .trim();
 
             if (n.isEmpty()) {
                 toast("اكتب اسمك");
                 return;
             }
+
             if (!isValidRoomCode(c)) {
                 toast("الكود لازم يكون 4 أرقام");
                 return;
             }
 
             playerName = n;
-            setBusy(join, true, "⏳ جاري الانضمام...", "🚀 انضمام");
-            networkExecutor.execute(() -> joinRoomProcess(c, join, token));
+
+            setBusy(
+                    join,
+                    true,
+                    "⏳ جاري الانضمام...",
+                    "🚀 انضمام"
+            );
+
+            networkExecutor.execute(
+                    () -> joinRoomProcess(
+                            c,
+                            join,
+                            token
+                    )
+            );
         });
 
-        Button back = button("رجوع");
-        back.setOnClickListener(v -> showHome());
+        Button back =
+                button("رجوع");
+
+        back.setOnClickListener(
+                v -> showHome()
+        );
+
         root.addView(back);
 
-        setScreen(scroll(root), "join");
+        setScreen(
+                scroll(root),
+                "join"
+        );
     }
 
-    private void joinRoomProcess(String code, Button joinBtn, int token) {
+    private void joinRoomProcess(
+            String code,
+            Button joinBtn,
+            int token
+    ) {
+
         try {
+
             validateSupabase();
-            code = cleanText(code, 4);
-            if (!isValidRoomCode(code)) throw new Exception("كود الغرفة غير صالح");
-            
-            playerName = cleanText(playerName, MAX_NAME_LENGTH);
-            if (playerName.isEmpty()) throw new Exception("اسم اللاعب غير صالح");
 
-            // البحث عن الغرفة
-            String encodedCode = URLEncoder.encode(code, StandardCharsets.UTF_8.name());
-            String roomQuery = SUPABASE_URL + "/rest/v1/rooms?code=eq." + encodedCode + "&select=*&limit=1";
-            String roomResponse = request("GET", roomQuery, null, false);
-            JSONArray roomResult = safeJsonArray(roomResponse);
+            code =
+                    cleanText(code, 4);
 
-            if (roomResult.length() == 0) {
-                throw new Exception("الغرفة غير موجودة");
+            playerName =
+                    cleanText(
+                            playerName,
+                            MAX_NAME_LENGTH
+                    );
+
+            if (!isValidRoomCode(code)) {
+                throw new Exception(
+                        "كود الغرفة غير صالح"
+                );
             }
 
-            JSONObject roomObj = roomResult.getJSONObject(0);
-            String status = roomObj.optString("status", "waiting");
-            if (!"waiting".equalsIgnoreCase(status)) {
-                throw new Exception("اللعبة بدأت بالفعل أو انتهت");
+            if (playerName.isEmpty()) {
+                throw new Exception(
+                        "اسم اللاعب غير صالح"
+                );
             }
 
-            roomId = roomObj.optString("id", "");
-            roomCode = roomObj.optString("code", code);
+            String query =
+                    restUrl(
+                            "/rest/v1/rooms?code=eq."
+                                    + encode(code)
+                                    + "&select=*&limit=1"
+                    );
+
+            String response =
+                    request(
+                            "GET",
+                            query,
+                            null,
+                            false
+                    );
+
+            JSONArray rooms =
+                    safeJsonArray(response);
+
+            if (rooms.length() == 0) {
+                throw new Exception(
+                        "الغرفة غير موجودة"
+                );
+            }
+
+            JSONObject room =
+                    rooms.getJSONObject(0);
+
+            String status =
+                    room.optString(
+                            "status",
+                            "waiting"
+                    );
+
+            if (!"waiting".equalsIgnoreCase(
+                    status
+            )) {
+
+                throw new Exception(
+                        "اللعبة بدأت بالفعل أو انتهت"
+                );
+            }
+
+            roomId =
+                    room.optString(
+                            "id",
+                            ""
+                    );
+
+            roomCode =
+                    room.optString(
+                            "code",
+                            code
+                    );
+
+            if (roomId.isEmpty()) {
+                throw new Exception(
+                        "معرّف الغرفة غير صحيح"
+                );
+            }
+
             isHost = false;
             score = 0;
             questionIndex = 0;
-            submittedAnswerKeys.clear();
-            submittedPredictionKeys.clear();
-            submittedMessageKeys.clear();
 
-            if (roomId.isEmpty()) {
-                throw new Exception("معرّف الغرفة غير صحيح");
-            }
+            clearSubmissionMemory();
 
-            // التحقق من اللاعبين الموجودين
-            JSONArray players = getPlayers();
+            JSONArray players =
+                    getPlayers();
+
             if (players.length() >= MAX_PLAYERS) {
-                throw new Exception("الغرفة ممتلئة");
+                throw new Exception(
+                        "الغرفة ممتلئة"
+                );
             }
 
-            // التحقق من عدم وجود لاعب بنفس الاسم أو الـ ID
-            for (int i = 0; i < players.length(); i++) {
-                JSONObject player = players.optJSONObject(i);
-                if (player == null) continue;
-                
-                String existingName = player.optString("name", "");
-                String existingPlayerId = player.optString("player_id", "");
+            for (int i = 0;
+                 i < players.length();
+                 i++) {
 
-                if (existingName.equalsIgnoreCase(playerName)) {
-                    throw new Exception("هذا الاسم مستعمل بالفعل في الغرفة");
+                JSONObject p =
+                        players.optJSONObject(i);
+
+                if (p == null) continue;
+
+                String existingId =
+                        p.optString(
+                                "player_id",
+                                ""
+                        );
+
+                String existingName =
+                        p.optString(
+                                "name",
+                                ""
+                        );
+
+                if (!existingId.isEmpty() &&
+                        existingId.equals(playerId)) {
+
+                    throw new Exception(
+                            "أنت موجود بالفعل في الغرفة"
+                    );
                 }
-                if (existingPlayerId.equals(playerId)) {
-                    throw new Exception("أنت موجود بالفعل في الغرفة");
+
+                if (!existingName.isEmpty() &&
+                        existingName.equalsIgnoreCase(
+                                playerName
+                        )) {
+
+                    throw new Exception(
+                            "هذا الاسم مستعمل بالفعل"
+                    );
                 }
             }
 
-            // إضافة اللاعب
             addPlayer();
 
+            // تحقق إضافي من عدم تجاوز الحد الأقصى
+            JSONArray afterInsert =
+                    getPlayers();
+
+            if (afterInsert.length() > MAX_PLAYERS) {
+
+                deleteCurrentPlayer();
+
+                throw new Exception(
+                        "الغرفة أصبحت ممتلئة"
+                );
+            }
+
             runOnUiThread(() -> {
-                if (!isScreen(token, "join")) return;
+
+                if (!isScreen(
+                        token,
+                        "join"
+                )) {
+                    return;
+                }
+
                 playSuccess();
+
                 showLobby();
             });
 
         } catch (Exception e) {
-            String errorMsg = extractSupabaseErrorMessage(e);
+
+            String error =
+                    extractSupabaseErrorMessage(e);
+
             runOnUiThread(() -> {
-                if (!isScreen(token, "join")) return;
-                setBusy(joinBtn, false, "⏳ جاري الانضمام...", "🚀 انضمام");
-                toast("خطأ: " + errorMsg);
+
+                if (!isScreen(
+                        token,
+                        "join"
+                )) {
+                    return;
+                }
+
+                setBusy(
+                        joinBtn,
+                        false,
+                        "⏳ جاري الانضمام...",
+                        "🚀 انضمام"
+                );
+
+                toast(
+                        "خطأ: " + error
+                );
             });
         }
     }
@@ -994,40 +1952,131 @@ public class MainActivity extends Activity {
     // PLAYER MANAGEMENT
     // ============================================================
 
-    private void addPlayer() throws Exception {
-        JSONObject player = new JSONObject();
-        player.put("room_id", roomId);
-        player.put("room_code", roomCode);
-        player.put("name", playerName);
-        player.put("is_host", isHost);
-        player.put("player_id", playerId);
-        player.put("score", 0);
-        player.put("ready", false);
-        player.put("joined_at", getCurrentTimestamp());
+    private void addPlayer()
+            throws Exception {
 
-        request("POST",
-                SUPABASE_URL + "/rest/v1/players",
+        JSONObject player =
+                new JSONObject();
+
+        player.put(
+                "room_id",
+                roomId
+        );
+
+        player.put(
+                "room_code",
+                roomCode
+        );
+
+        player.put(
+                "name",
+                playerName
+        );
+
+        player.put(
+                "is_host",
+                isHost
+        );
+
+        player.put(
+                "player_id",
+                playerId
+        );
+
+        player.put(
+                "score",
+                0
+        );
+
+        player.put(
+                "ready",
+                false
+        );
+
+        player.put(
+                "joined_at",
+                getCurrentTimestamp()
+        );
+
+        request(
+                "POST",
+                restUrl("/rest/v1/players"),
                 player.toString(),
-                false);
+                false
+        );
     }
 
-    private JSONArray getPlayers() throws Exception {
-        String encodedRoomId = URLEncoder.encode(roomId, StandardCharsets.UTF_8.name());
-        String query = SUPABASE_URL + "/rest/v1/players?room_id=eq." + encodedRoomId + 
-                       "&select=*&order=joined_at.asc";
-        String response = request("GET", query, null, false);
+    private JSONArray getPlayers()
+            throws Exception {
+
+        String query =
+                restUrl(
+                        "/rest/v1/players?room_id=eq."
+                                + encode(roomId)
+                                + "&select=*&order=joined_at.asc"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
         return safeJsonArray(response);
     }
 
-    private JSONObject getMe() throws Exception {
-        String encodedPlayerId = URLEncoder.encode(playerId, StandardCharsets.UTF_8.name());
-        String encodedRoomId = URLEncoder.encode(roomId, StandardCharsets.UTF_8.name());
-        String query = SUPABASE_URL + "/rest/v1/players?player_id=eq." + encodedPlayerId +
-                       "&room_id=eq." + encodedRoomId + "&select=*&limit=1";
-        String response = request("GET", query, null, false);
-        JSONArray data = safeJsonArray(response);
-        if (data.length() == 0) throw new Exception("اللاعب غير موجود");
+    private JSONObject getMe()
+            throws Exception {
+
+        String query =
+                restUrl(
+                        "/rest/v1/players?player_id=eq."
+                                + encode(playerId)
+                                + "&room_id=eq."
+                                + encode(roomId)
+                                + "&select=*&limit=1"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
+        JSONArray data =
+                safeJsonArray(response);
+
+        if (data.length() == 0) {
+            throw new Exception(
+                    "اللاعب غير موجود في الغرفة"
+            );
+        }
+
         return data.getJSONObject(0);
+    }
+
+    private void deleteCurrentPlayer()
+            throws Exception {
+
+        if (playerId.isEmpty()) {
+            return;
+        }
+
+        request(
+                "DELETE",
+                restUrl(
+                        "/rest/v1/players?player_id=eq."
+                                + encode(playerId)
+                                + "&room_id=eq."
+                                + encode(roomId)
+                ),
+                null,
+                false
+        );
     }
 
     // ============================================================
@@ -1035,713 +2084,1912 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void showLobby() {
+
         stopTimer();
-        int token = beginScreen("lobby");
+
+        int token =
+                beginScreen("lobby");
 
         LinearLayout root = root();
-        applyBackground(root, "bg_lobby");
 
-        TextView t = title("🎮 Lobby");
-        t.setTextColor(textColor);
-        root.addView(t);
+        applyBackground(
+                root,
+                "bg_lobby"
+        );
 
-        TextView room = subtitle("كود الغرفة\n" + roomCode);
+        root.addView(
+                title("🎮 Lobby")
+        );
+
+        TextView room =
+                subtitle(
+                        "كود الغرفة\n" +
+                                roomCode
+                );
+
         room.setTextSize(23);
         room.setTextColor(textColor);
-        room.setTypeface(null, Typeface.BOLD);
+        room.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
         root.addView(room);
 
-        Button copy = button("📋 نسخ الكود");
-        copy.setOnClickListener(v -> copyRoomCode());
+        Button copy =
+                button("📋 نسخ الكود");
+
+        copy.setOnClickListener(
+                v -> copyRoomCode()
+        );
+
         root.addView(copy);
 
-        Button share = button("📤 مشاركة الكود");
-        share.setOnClickListener(v -> shareRoomCode());
+        Button share =
+                button("📤 مشاركة الكود");
+
+        share.setOnClickListener(
+                v -> shareRoomCode()
+        );
+
         root.addView(share);
 
-        TextView status = subtitle("⏳ جاري تحميل اللاعبين...");
+        TextView status =
+                subtitle(
+                        "⏳ جاري تحميل اللاعبين..."
+                );
+
         root.addView(status);
 
-        LinearLayout playersCard = card();
-        root.addView(playersCard);
-        loadLobbyPlayers(playersCard, status, token);
+        LinearLayout playersCard =
+                card();
 
-        Button ready = button("✅ Ready");
+        root.addView(playersCard);
+
+        loadLobbyPlayers(
+                playersCard,
+                status,
+                token
+        );
+
+        Button ready =
+                button("✅ Ready");
+
         root.addView(ready);
+
         ready.setOnClickListener(v -> {
-            setBusy(ready, true, "⏳ ...", "✅ Ready");
+
+            setBusy(
+                    ready,
+                    true,
+                    "⏳ ...",
+                    "✅ Ready"
+            );
+
             networkExecutor.execute(() -> {
+
                 try {
+
                     setPlayerReady(true);
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "lobby")) return;
-                        ready.setText("✓ أنت Ready");
+
+                        if (!isScreen(
+                                token,
+                                "lobby"
+                        )) {
+                            return;
+                        }
+
+                        ready.setText(
+                                "✓ أنت Ready"
+                        );
+
                         ready.setEnabled(false);
+
                         playSuccess();
-                        toast("تم تسجيلك Ready");
+
+                        toast(
+                                "تم تسجيلك Ready"
+                        );
                     });
+
                 } catch (Exception e) {
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "lobby")) return;
-                        setBusy(ready, false, "⏳ ...", "✅ Ready");
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                        if (!isScreen(
+                                token,
+                                "lobby"
+                        )) {
+                            return;
+                        }
+
+                        setBusy(
+                                ready,
+                                false,
+                                "⏳ ...",
+                                "✅ Ready"
+                        );
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     });
                 }
             });
         });
 
         if (isHost) {
-            Button start = button("🚀 بدء اللعبة");
+
+            Button start =
+                    button("🚀 بدء اللعبة");
+
             root.addView(start);
+
             start.setOnClickListener(v -> {
-                setBusy(start, true, "⏳ جاري البدء...", "🚀 بدء اللعبة");
+
+                setBusy(
+                        start,
+                        true,
+                        "⏳ جاري البدء...",
+                        "🚀 بدء اللعبة"
+                );
+
                 networkExecutor.execute(() -> {
+
                     try {
-                        JSONArray players = getPlayers();
-                        if (players.length() != 2) {
-                            throw new Exception("يلزم لاعبان بالضبط للبدء");
+
+                        JSONArray players =
+                                getPlayers();
+
+                        if (players.length() !=
+                                MAX_PLAYERS) {
+
+                            throw new Exception(
+                                    "يلزم لاعبان بالضبط للبدء"
+                            );
                         }
-                        for (int i = 0; i < players.length(); i++) {
-                            if (!players.getJSONObject(i).optBoolean("ready", false)) {
-                                throw new Exception("لازم الاثنين يعملوا Ready");
+
+                        for (int i = 0;
+                             i < players.length();
+                             i++) {
+
+                            if (!players
+                                    .getJSONObject(i)
+                                    .optBoolean(
+                                            "ready",
+                                            false
+                                    )) {
+
+                                throw new Exception(
+                                        "لازم الاثنين يعملوا Ready"
+                                );
                             }
                         }
+
                         setAllReady(false);
-                        setRoomStatus("playing");
-                        setGameState(0, "answering");
+
+                        setRoomStatus(
+                                "playing"
+                        );
+
+                        setGameState(
+                                0,
+                                "answering"
+                        );
+
                         questionIndex = 0;
+
                         runOnUiThread(() -> {
-                            if (isScreen(token, "lobby")) {
+
+                            if (isScreen(
+                                    token,
+                                    "lobby"
+                            )) {
+
                                 playSuccess();
+
                                 showAnswerScreen();
                             }
                         });
+
                     } catch (Exception e) {
+
                         runOnUiThread(() -> {
-                            if (!isScreen(token, "lobby")) return;
-                            setBusy(start, false, "⏳ جاري البدء...", "🚀 بدء اللعبة");
-                            toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                            if (!isScreen(
+                                    token,
+                                    "lobby"
+                            )) {
+                                return;
+                            }
+
+                            setBusy(
+                                    start,
+                                    false,
+                                    "⏳ جاري البدء...",
+                                    "🚀 بدء اللعبة"
+                            );
+
+                            toast(
+                                    "خطأ: " +
+                                            extractSupabaseErrorMessage(e)
+                            );
                         });
                     }
                 });
             });
         }
 
-        Button chat = button("💬 Chat");
-        chat.setOnClickListener(v -> showChat());
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
         root.addView(chat);
 
-        Button leave = button("🚪 مغادرة الغرفة");
-        leave.setOnClickListener(v -> leaveRoom());
+        Button leave =
+                button("🚪 مغادرة الغرفة");
+
+        leave.setOnClickListener(
+                v -> leaveRoom()
+        );
+
         root.addView(leave);
 
-        setScreen(scroll(root), "lobby");
-        startLobbyPolling(token, playersCard, status);
+        setScreen(
+                scroll(root),
+                "lobby"
+        );
+
+        startLobbyPolling(
+                token,
+                playersCard,
+                status
+        );
     }
 
-    private void loadLobbyPlayers(LinearLayout card, TextView status, int token) {
+    private void loadLobbyPlayers(
+            LinearLayout card,
+            TextView status,
+            int token
+    ) {
+
         networkExecutor.execute(() -> {
+
             try {
-                JSONArray players = getPlayers();
+
+                JSONArray players =
+                        getPlayers();
+
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "lobby")) return;
-                    renderPlayers(card, players);
+
+                    if (!isScreen(
+                            token,
+                            "lobby"
+                    )) {
+                        return;
+                    }
+
+                    status.setText(
+                            "متصل • " +
+                                    players.length() +
+                                    " / " +
+                                    MAX_PLAYERS
+                    );
+
+                    renderPlayers(
+                            card,
+                            players
+                    );
                 });
+
             } catch (Exception e) {
+
                 runOnUiThread(() -> {
-                    if (isScreen(token, "lobby")) {
-                        status.setText("تعذر تحديث اللاعبين");
+
+                    if (isScreen(
+                            token,
+                            "lobby"
+                    )) {
+
+                        status.setText(
+                                "⚠️ تعذر تحديث اللاعبين"
+                        );
                     }
                 });
             }
         });
     }
 
-    private void renderPlayers(LinearLayout card, JSONArray players) {
+    private void renderPlayers(
+            LinearLayout card,
+            JSONArray players
+    ) {
+
         card.removeAllViews();
-        TextView header = label("اللاعبين (" + players.length() + "/" + MAX_PLAYERS + ")");
-        card.addView(header);
 
-        // تتبع الـ player IDs لمنع التكرار
-        Set<String> seenPlayerIds = new HashSet<>();
+        Set<String> seenIds =
+                new HashSet<>();
 
-        for (int i = 0; i < players.length(); i++) {
-            JSONObject p = players.optJSONObject(i);
+        int visibleCount = 0;
+
+        for (int i = 0;
+             i < players.length();
+             i++) {
+
+            JSONObject p =
+                    players.optJSONObject(i);
+
             if (p == null) continue;
 
-            String playerId = p.optString("player_id", "");
-            if (playerId.isEmpty() || seenPlayerIds.contains(playerId)) {
-                continue; // تخطي مكررات
+            String id =
+                    p.optString(
+                            "player_id",
+                            ""
+                    );
+
+            if (id.isEmpty() ||
+                    seenIds.contains(id)) {
+                continue;
             }
-            seenPlayerIds.add(playerId);
 
-            String name = p.optString("name", "?");
-            boolean host = p.optBoolean("is_host", false);
-            boolean ready = p.optBoolean("ready", false);
+            seenIds.add(id);
 
-            TextView row = new TextView(this);
-            row.setText((host ? "👑 " : "👤 ") + name + (ready ? "   ✓ Ready" : "   • Waiting"));
-            row.setTextColor(textColor);
+            visibleCount++;
+
+            String name =
+                    p.optString(
+                            "name",
+                            "?"
+                    );
+
+            boolean host =
+                    p.optBoolean(
+                            "is_host",
+                            false
+                    );
+
+            boolean ready =
+                    p.optBoolean(
+                            "ready",
+                            false
+                    );
+
+            TextView row =
+                    new TextView(this);
+
+            row.setText(
+                    (host
+                            ? "👑 "
+                            : "👤 ")
+                            + name
+                            + (
+                            ready
+                                    ? "   ✓ Ready"
+                                    : "   • Waiting"
+                    )
+            );
+
+            row.setTextColor(
+                    textColor
+            );
+
             row.setTextSize(16);
-            row.setPadding(0, dp(10), 0, dp(10));
+
+            row.setPadding(
+                    0,
+                    dp(10),
+                    0,
+                    dp(10)
+            );
+
             card.addView(row);
         }
+
+        TextView header =
+                label(
+                        "اللاعبين (" +
+                                visibleCount +
+                                "/" +
+                                MAX_PLAYERS +
+                                ")"
+                );
+
+        card.addView(
+                header,
+                0
+        );
     }
 
-    private void startLobbyPolling(int token, LinearLayout playersCard, TextView status) {
-        Runnable poll = new Runnable() {
-            @Override
-            public void run() {
-                if (!isScreen(token, "lobby")) return;
-                if (!pollBusy.compareAndSet(false, true)) {
-                    schedulePolling(this, 700L, token, "lobby");
-                    return;
-                }
+    private void startLobbyPolling(
+            int token,
+            LinearLayout playersCard,
+            TextView status
+    ) {
 
-                networkExecutor.execute(() -> {
-                    try {
-                        JSONObject me = getMe();
-                        isHost = me.optBoolean("is_host", isHost);
-                        score = me.optInt("score", score);
+        Runnable poll =
+                new Runnable() {
 
-                        JSONArray players = getPlayers();
-                        JSONObject state = getGameState();
-                        String gameStatus = state.optString("status", "waiting");
-                        int index = state.optInt("question_index", 0);
+                    @Override
+                    public void run() {
 
-                        runOnUiThread(() -> {
-                            if (!isScreen(token, "lobby")) return;
-                            status.setText("متصل • " + players.length() + " / " + MAX_PLAYERS);
-                            renderPlayers(playersCard, players);
-                            if ("answering".equals(gameStatus)) {
-                                questionIndex = Math.max(0, Math.min(index, questions.length - 1));
-                                showAnswerScreen();
+                        if (!isScreen(
+                                token,
+                                "lobby"
+                        )) {
+                            return;
+                        }
+
+                        if (!pollBusy.compareAndSet(
+                                false,
+                                true
+                        )) {
+
+                            schedulePolling(
+                                    this,
+                                    700L,
+                                    token,
+                                    "lobby"
+                            );
+
+                            return;
+                        }
+
+                        networkExecutor.execute(() -> {
+
+                            try {
+
+                                JSONObject me =
+                                        getMe();
+
+                                isHost =
+                                        me.optBoolean(
+                                                "is_host",
+                                                isHost
+                                        );
+
+                                score =
+                                        me.optInt(
+                                                "score",
+                                                score
+                                        );
+
+                                JSONArray players =
+                                        getPlayers();
+
+                                JSONObject state =
+                                        getGameState();
+
+                                String gameStatus =
+                                        state.optString(
+                                                "status",
+                                                "waiting"
+                                        );
+
+                                int index =
+                                        state.optInt(
+                                                "question_index",
+                                                0
+                                        );
+
+                                runOnUiThread(() -> {
+
+                                    if (!isScreen(
+                                            token,
+                                            "lobby"
+                                    )) {
+                                        return;
+                                    }
+
+                                    status.setText(
+                                            "متصل • " +
+                                                    players.length() +
+                                                    " / " +
+                                                    MAX_PLAYERS
+                                    );
+
+                                    renderPlayers(
+                                            playersCard,
+                                            players
+                                    );
+
+                                    if ("answering".equals(
+                                            gameStatus
+                                    )) {
+
+                                        questionIndex =
+                                                clampQuestionIndex(
+                                                        index
+                                                );
+
+                                        showAnswerScreen();
+                                    }
+                                });
+
+                            } catch (Exception e) {
+
+                                runOnUiThread(() -> {
+
+                                    if (isScreen(
+                                            token,
+                                            "lobby"
+                                    )) {
+
+                                        status.setText(
+                                                "⚠️ الاتصال متذبذب"
+                                        );
+                                    }
+                                });
+
+                            } finally {
+
+                                pollBusy.set(false);
+
+                                schedulePolling(
+                                        this,
+                                        POLL_LOBBY,
+                                        token,
+                                        "lobby"
+                                );
                             }
                         });
-                    } catch (Exception e) {
-                        runOnUiThread(() -> {
-                            if (isScreen(token, "lobby")) {
-                                status.setText("⚠️ الاتصال متذبذب");
-                            }
-                        });
-                    } finally {
-                        pollBusy.set(false);
-                        schedulePolling(this, POLL_LOBBY, token, "lobby");
                     }
-                });
-            }
-        };
-        schedulePolling(poll, 1000L, token, "lobby");
+                };
+
+        schedulePolling(
+                poll,
+                900L,
+                token,
+                "lobby"
+        );
+    }
+
+    private int clampQuestionIndex(int index) {
+
+        return Math.max(
+                0,
+                Math.min(
+                        index,
+                        questions.length - 1
+                )
+        );
     }
 
     private void copyRoomCode() {
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+
+        ClipboardManager clipboard =
+                (ClipboardManager)
+                        getSystemService(
+                                Context.CLIPBOARD_SERVICE
+                        );
+
         if (clipboard != null) {
-            clipboard.setPrimaryClip(ClipData.newPlainText("GuessUs Room", roomCode));
+
+            clipboard.setPrimaryClip(
+                    ClipData.newPlainText(
+                            "GuessUs Room",
+                            roomCode
+                    )
+            );
+
             playSuccess();
-            toast("تم نسخ كود الغرفة 📋");
+
+            toast(
+                    "تم نسخ كود الغرفة 📋"
+            );
         }
     }
 
     private void shareRoomCode() {
-        Intent intent = new Intent(Intent.ACTION_SEND);
+
+        Intent intent =
+                new Intent(
+                        Intent.ACTION_SEND
+                );
+
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_TEXT, "🎮 تعال نلعب GuessUs!\nكود الغرفة: " + roomCode);
-        startActivity(Intent.createChooser(intent, "مشاركة كود GuessUs"));
+
+        intent.putExtra(
+                Intent.EXTRA_TEXT,
+                "🎮 تعال نلعب GuessUs!\n" +
+                        "كود الغرفة: " +
+                        roomCode
+        );
+
+        startActivity(
+                Intent.createChooser(
+                        intent,
+                        "مشاركة كود GuessUs"
+                )
+        );
     }
 
     // ============================================================
-    // ANSWER SCREEN
+    // ANSWERS
     // ============================================================
 
     private void showAnswerScreen() {
-        stopTimer();
-        int token = beginScreen("answer");
 
-        questionIndex = Math.max(0, Math.min(questionIndex, questions.length - 1));
+        stopTimer();
+
+        int token =
+                beginScreen("answer");
+
+        questionIndex =
+                clampQuestionIndex(
+                        questionIndex
+                );
+
         answerSent = false;
         predictionSent = false;
         nextReadySent = false;
 
         LinearLayout root = root();
-        applyBackground(root, "bg_game");
 
-        TextView header = title("السؤال " + (questionIndex + 1) + "/" + questions.length);
-        root.addView(header);
+        applyBackground(
+                root,
+                "bg_game"
+        );
 
-        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(questions.length);
-        progress.setProgress(questionIndex + 1);
-        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
-        progressParams.setMargins(dp(8), 0, dp(8), dp(14));
-        root.addView(progress, progressParams);
+        root.addView(
+                title(
+                        "السؤال " +
+                                (questionIndex + 1) +
+                                "/" +
+                                questions.length
+                )
+        );
 
-        LinearLayout qCard = card();
-        TextView q = new TextView(this);
-        q.setText(questions[questionIndex]);
-        q.setTextColor(textColor);
+        ProgressBar progress =
+                new ProgressBar(
+                        this,
+                        null,
+                        android.R.attr.progressBarStyleHorizontal
+                );
+
+        progress.setMax(
+                questions.length
+        );
+
+        progress.setProgress(
+                questionIndex + 1
+        );
+
+        LinearLayout.LayoutParams progressParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(8)
+                );
+
+        progressParams.setMargins(
+                dp(8),
+                0,
+                dp(8),
+                dp(14)
+        );
+
+        root.addView(
+                progress,
+                progressParams
+        );
+
+        LinearLayout qCard =
+                card();
+
+        TextView q =
+                new TextView(this);
+
+        q.setText(
+                questions[questionIndex]
+        );
+
+        q.setTextColor(
+                textColor
+        );
+
         q.setTextSize(23);
-        q.setGravity(Gravity.CENTER);
-        q.setTypeface(null, Typeface.BOLD);
-        q.setPadding(dp(5), dp(20), dp(5), dp(20));
+
+        q.setGravity(
+                Gravity.CENTER
+        );
+
+        q.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        q.setPadding(
+                dp(5),
+                dp(20),
+                dp(5),
+                dp(20)
+        );
+
         qCard.addView(q);
+
         root.addView(qCard);
 
-        TextView timer = subtitle("⏱️ " + ANSWER_TIME + " ثانية");
+        TextView timer =
+                subtitle(
+                        "⏱️ " +
+                                ANSWER_TIME +
+                                " ثانية"
+                );
+
         timer.setTextSize(20);
         timer.setTextColor(accentColor);
-        timer.setTypeface(null, Typeface.BOLD);
+        timer.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
         root.addView(timer);
 
-        EditText answer = input("اكتب إجابتك...");
-        answer.setFilters(new InputFilter[]{new InputFilter.LengthFilter(MAX_ANSWER_LENGTH)});
+        EditText answer =
+                input("اكتب إجابتك...");
+
+        answer.setFilters(
+                new InputFilter[]{
+                        new InputFilter.LengthFilter(
+                                MAX_ANSWER_LENGTH
+                        )
+                }
+        );
+
         answer.setSingleLine(false);
         answer.setMinHeight(dp(110));
-        answer.setGravity(Gravity.TOP | Gravity.RIGHT);
-        answer.setPadding(dp(15), dp(12), dp(15), dp(12));
+
+        answer.setGravity(
+                Gravity.TOP |
+                        Gravity.RIGHT
+        );
+
+        answer.setPadding(
+                dp(15),
+                dp(12),
+                dp(15),
+                dp(12)
+        );
+
         root.addView(answer);
 
-        Button send = button("📤 إرسال الإجابة");
+        Button send =
+                button("📤 إرسال الإجابة");
+
         root.addView(send);
 
-        Button skip = button("⏭️ تخطي السؤال");
+        Button skip =
+                button("⏭️ تخطي السؤال");
+
         root.addView(skip);
 
         send.setOnClickListener(v -> {
+
             if (answerSent) return;
-            String value = cleanText(answer.getText().toString(), MAX_ANSWER_LENGTH);
+
+            String value =
+                    cleanText(
+                            answer.getText().toString(),
+                            MAX_ANSWER_LENGTH
+                    );
+
             if (value.isEmpty()) {
                 toast("اكتب إجابتك");
                 return;
             }
+
             answerSent = true;
+
             send.setEnabled(false);
             skip.setEnabled(false);
 
             networkExecutor.execute(() -> {
+
                 try {
+
                     submitAnswer(value);
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "answer")) return;
+
+                        if (!isScreen(
+                                token,
+                                "answer"
+                        )) {
+                            return;
+                        }
+
                         playSuccess();
+
                         showWaitingForAnswers();
                     });
+
                 } catch (Exception e) {
+
                     answerSent = false;
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "answer")) return;
+
+                        if (!isScreen(
+                                token,
+                                "answer"
+                        )) {
+                            return;
+                        }
+
                         send.setEnabled(true);
                         skip.setEnabled(true);
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     });
                 }
             });
         });
 
         skip.setOnClickListener(v -> {
+
             if (answerSent) return;
+
             answerSent = true;
+
             send.setEnabled(false);
             skip.setEnabled(false);
 
             networkExecutor.execute(() -> {
+
                 try {
+
                     submitAnswer("SKIP");
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "answer")) return;
+
+                        if (!isScreen(
+                                token,
+                                "answer"
+                        )) {
+                            return;
+                        }
+
                         playClick();
+
                         showWaitingForAnswers();
                     });
+
                 } catch (Exception e) {
+
                     answerSent = false;
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "answer")) return;
+
+                        if (!isScreen(
+                                token,
+                                "answer"
+                        )) {
+                            return;
+                        }
+
                         send.setEnabled(true);
                         skip.setEnabled(true);
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     });
                 }
             });
         });
 
-        Button chat = button("💬 Chat");
-        chat.setOnClickListener(v -> showChat());
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
         root.addView(chat);
 
-        setScreen(scroll(root), "answer");
-        startAnswerTimer(timer, send, skip);
+        setScreen(
+                scroll(root),
+                "answer"
+        );
+
+        startAnswerTimer(
+                timer,
+                send,
+                skip
+        );
     }
 
-    private void startAnswerTimer(TextView timer, Button send, Button skip) {
-        answerTimer = new CountDownTimer(ANSWER_TIME * 1000L, 1000L) {
-            @Override
-            public void onTick(long left) {
-                long seconds = left / 1000L;
-                timer.setText("⏱️ " + seconds + " ثانية");
-            }
+    private void startAnswerTimer(
+            TextView timer,
+            Button send,
+            Button skip
+    ) {
 
-            @Override
-            public void onFinish() {
-                timer.setText("⏰ انتهى الوقت");
-                playTimeUp();
-                if (answerSent) return;
+        answerTimer =
+                new CountDownTimer(
+                        ANSWER_TIME * 1000L,
+                        1000L
+                ) {
 
-                answerSent = true;
-                send.setEnabled(false);
-                skip.setEnabled(false);
+                    @Override
+                    public void onTick(
+                            long left
+                    ) {
 
-                networkExecutor.execute(() -> {
-                    try {
-                        submitAnswer("SKIP");
-                    } catch (Exception ignored) {
+                        timer.setText(
+                                "⏱️ " +
+                                        (left / 1000L) +
+                                        " ثانية"
+                        );
                     }
-                    runOnUiThread(() -> {
-                        if ("answer".equals(currentScreen)) {
-                            showWaitingForAnswers();
+
+                    @Override
+                    public void onFinish() {
+
+                        timer.setText(
+                                "⏰ انتهى الوقت"
+                        );
+
+                        playTimeUp();
+
+                        if (answerSent) {
+                            return;
                         }
-                    });
-                });
-            }
-        }.start();
+
+                        answerSent = true;
+
+                        send.setEnabled(false);
+                        skip.setEnabled(false);
+
+                        networkExecutor.execute(() -> {
+
+                            try {
+                                submitAnswer("SKIP");
+                            } catch (Exception ignored) {
+                            }
+
+                            runOnUiThread(() -> {
+
+                                if ("answer".equals(
+                                        currentScreen
+                                )) {
+
+                                    showWaitingForAnswers();
+                                }
+                            });
+                        });
+                    }
+                };
+
+        answerTimer.start();
     }
 
     private void stopTimer() {
+
         if (answerTimer != null) {
+
             answerTimer.cancel();
             answerTimer = null;
         }
     }
 
-    private void submitAnswer(String answer) throws Exception {
-        String key = roomCode + "-" + questionIndex + "-" + playerName;
+    private void submitAnswer(
+            String answer
+    ) throws Exception {
+
+        String key =
+                roomCode +
+                        "-" +
+                        questionIndex +
+                        "-" +
+                        playerId;
+
         if (submittedAnswerKeys.contains(key)) {
-            throw new Exception("تم إرسال إجابتك بالفعل");
+
+            throw new Exception(
+                    "تم إرسال إجابتك بالفعل"
+            );
         }
 
-        String safeAnswer = cleanText(answer, MAX_ANSWER_LENGTH);
-        if (safeAnswer.isEmpty()) throw new Exception("الإجابة فارغة");
+        String safeAnswer =
+                cleanText(
+                        answer,
+                        MAX_ANSWER_LENGTH
+                );
 
-        JSONObject object = new JSONObject();
-        object.put("room_code", roomCode);
-        object.put("round", questionIndex);
-        object.put("player_name", playerName);
-        object.put("answer", safeAnswer);
-        object.put("submitted_at", getCurrentTimestamp());
+        if (safeAnswer.isEmpty()) {
+            throw new Exception(
+                    "الإجابة فارغة"
+            );
+        }
 
-        request("POST",
-                SUPABASE_URL + "/rest/v1/round_answers",
+        JSONObject object =
+                new JSONObject();
+
+        object.put(
+                "room_code",
+                roomCode
+        );
+
+        object.put(
+                "round",
+                questionIndex
+        );
+
+        object.put(
+                "player_name",
+                playerName
+        );
+
+        object.put(
+                "answer",
+                safeAnswer
+        );
+
+        request(
+                "POST",
+                restUrl("/rest/v1/round_answers"),
                 object.toString(),
-                false);
+                false
+        );
 
         submittedAnswerKeys.add(key);
     }
 
-    private JSONArray getRoundAnswers() throws Exception {
-        String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-        String query = SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." + encodedCode +
-                       "&round=eq." + questionIndex + "&select=*&order=created_at.asc";
-        String response = request("GET", query, null, false);
+    private JSONArray getRoundAnswers()
+            throws Exception {
+
+        String query =
+                restUrl(
+                        "/rest/v1/round_answers?room_code=eq."
+                                + encode(roomCode)
+                                + "&round=eq."
+                                + questionIndex
+                                + "&select=*"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
         return safeJsonArray(response);
     }
 
-    private int countUniqueField(JSONArray rows, String field) {
-        Set<String> unique = new HashSet<>();
-        for (int i = 0; i < rows.length(); i++) {
-            JSONObject row = rows.optJSONObject(i);
+    private int countUniqueField(
+            JSONArray rows,
+            String field
+    ) {
+
+        Set<String> unique =
+                new HashSet<>();
+
+        for (int i = 0;
+             i < rows.length();
+             i++) {
+
+            JSONObject row =
+                    rows.optJSONObject(i);
+
             if (row == null) continue;
-            String value = row.optString(field, "").trim();
+
+            String value =
+                    row.optString(
+                            field,
+                            ""
+                    ).trim();
+
             if (!value.isEmpty()) {
                 unique.add(value);
             }
         }
+
         return unique.size();
     }
 
     // ============================================================
-    // WAITING FOR ANSWERS
+    // WAITING ANSWERS
     // ============================================================
 
     private void showWaitingForAnswers() {
-        stopTimer();
-        int token = beginScreen("waiting_answers");
-        LinearLayout root = root();
-        applyBackground(root, "bg_game");
-        root.addView(title("⏳ نستنّاو صاحبك"));
-        root.addView(subtitle("تم إرسال إجابتك بنجاح.\nكي يكمل اللاعب الآخر، تبدأ مرحلة التوقع."));
 
-        TextView counter = subtitle("الإجابات: 0 / 2");
+        stopTimer();
+
+        int token =
+                beginScreen(
+                        "waiting_answers"
+                );
+
+        LinearLayout root = root();
+
+        applyBackground(
+                root,
+                "bg_game"
+        );
+
+        root.addView(
+                title("⏳ نستنّاو صاحبك")
+        );
+
+        root.addView(
+                subtitle(
+                        "تم إرسال إجابتك بنجاح.\n" +
+                                "كي يكمل اللاعب الآخر، تبدأ مرحلة التوقع."
+                )
+        );
+
+        TextView counter =
+                subtitle(
+                        "الإجابات: 0 / 2"
+                );
+
         counter.setTextSize(19);
         counter.setTextColor(accentColor);
+
         root.addView(counter);
 
-        Button chat = button("💬 Chat");
-        chat.setOnClickListener(v -> showChat());
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
         root.addView(chat);
 
-        setScreen(scroll(root), "waiting_answers");
-        startAnswerPolling(counter, token);
+        setScreen(
+                scroll(root),
+                "waiting_answers"
+        );
+
+        startAnswerPolling(
+                counter,
+                token
+        );
     }
 
-    private void startAnswerPolling(TextView counter, int token) {
-        Runnable poll = new Runnable() {
-            @Override
-            public void run() {
-                if (!isScreen(token, "waiting_answers")) return;
-                if (!pollBusy.compareAndSet(false, true)) {
-                    schedulePolling(this, 700L, token, "waiting_answers");
-                    return;
-                }
+    private void startAnswerPolling(
+            TextView counter,
+            int token
+    ) {
 
-                networkExecutor.execute(() -> {
-                    try {
-                        JSONArray answers = getRoundAnswers();
-                        JSONArray players = getPlayers();
-                        JSONObject state = getGameState();
-                        String status = state.optString("status", "answering");
+        Runnable poll =
+                new Runnable() {
 
-                        int uniqueAnswers = countUniqueField(answers, "player_name");
-                        runOnUiThread(() -> {
-                            if (!isScreen(token, "waiting_answers")) return;
-                            counter.setText("الإجابات: " + uniqueAnswers + " / " + Math.min(players.length(), MAX_PLAYERS));
-                            if ("predicting".equals(status)) {
-                                showPredictionScreen();
+                    @Override
+                    public void run() {
+
+                        if (!isScreen(
+                                token,
+                                "waiting_answers"
+                        )) {
+                            return;
+                        }
+
+                        if (!pollBusy.compareAndSet(
+                                false,
+                                true
+                        )) {
+
+                            schedulePolling(
+                                    this,
+                                    700L,
+                                    token,
+                                    "waiting_answers"
+                            );
+
+                            return;
+                        }
+
+                        networkExecutor.execute(() -> {
+
+                            try {
+
+                                JSONArray answers =
+                                        getRoundAnswers();
+
+                                JSONArray players =
+                                        getPlayers();
+
+                                JSONObject state =
+                                        getGameState();
+
+                                String status =
+                                        state.optString(
+                                                "status",
+                                                "answering"
+                                        );
+
+                                int uniqueAnswers =
+                                        countUniqueField(
+                                                answers,
+                                                "player_name"
+                                        );
+
+                                runOnUiThread(() -> {
+
+                                    if (!isScreen(
+                                            token,
+                                            "waiting_answers"
+                                    )) {
+                                        return;
+                                    }
+
+                                    counter.setText(
+                                            "الإجابات: " +
+                                                    uniqueAnswers +
+                                                    " / " +
+                                                    Math.min(
+                                                            players.length(),
+                                                            MAX_PLAYERS
+                                                    )
+                                    );
+
+                                    if ("predicting".equals(
+                                            status
+                                    )) {
+
+                                        showPredictionScreen();
+                                    }
+                                });
+
+                                if (uniqueAnswers >=
+                                        MAX_PLAYERS &&
+                                        players.length() ==
+                                                MAX_PLAYERS &&
+                                        isHost &&
+                                        "answering".equals(
+                                                status
+                                        )) {
+
+                                    setGameState(
+                                            questionIndex,
+                                            "predicting"
+                                    );
+
+                                    runOnUiThread(() -> {
+
+                                        if (isScreen(
+                                                token,
+                                                "waiting_answers"
+                                        )) {
+
+                                            showPredictionScreen();
+                                        }
+                                    });
+                                }
+
+                            } catch (Exception ignored) {
+
+                            } finally {
+
+                                pollBusy.set(false);
+
+                                schedulePolling(
+                                        this,
+                                        POLL_GAME,
+                                        token,
+                                        "waiting_answers"
+                                );
                             }
                         });
-
-                        if (uniqueAnswers >= MAX_PLAYERS && players.length() == MAX_PLAYERS && isHost &&
-                                "answering".equals(status)) {
-                            setGameState(questionIndex, "predicting");
-                            runOnUiThread(() -> {
-                                if (isScreen(token, "waiting_answers")) {
-                                    showPredictionScreen();
-                                }
-                            });
-                        }
-                    } catch (Exception ignored) {
-                    } finally {
-                        pollBusy.set(false);
-                        schedulePolling(this, POLL_GAME, token, "waiting_answers");
                     }
-                });
-            }
-        };
-        schedulePolling(poll, 900L, token, "waiting_answers");
+                };
+
+        schedulePolling(
+                poll,
+                900L,
+                token,
+                "waiting_answers"
+        );
     }
 
     // ============================================================
-    // PREDICTION SCREEN
+    // PREDICTION
     // ============================================================
 
     private void showPredictionScreen() {
+
         stopTimer();
-        int token = beginScreen("prediction");
+
+        int token =
+                beginScreen("prediction");
+
         predictionSent = false;
 
         LinearLayout root = root();
-        applyBackground(root, "bg_game");
-        root.addView(title("🎯 وقت التوقع!"));
-        root.addView(subtitle("اختار صاحبك وتوقّع بالضبط شنوّة كتب."));
 
-        LinearLayout questionCard = card();
-        TextView question = new TextView(this);
-        question.setText(questions[questionIndex]);
-        question.setTextColor(textColor);
+        applyBackground(
+                root,
+                "bg_game"
+        );
+
+        root.addView(
+                title("🎯 وقت التوقع!")
+        );
+
+        root.addView(
+                subtitle(
+                        "اختار صاحبك وتوقّع بالضبط شنوّة كتب."
+                )
+        );
+
+        LinearLayout questionCard =
+                card();
+
+        TextView question =
+                new TextView(this);
+
+        question.setText(
+                questions[questionIndex]
+        );
+
+        question.setTextColor(
+                textColor
+        );
+
         question.setTextSize(20);
-        question.setGravity(Gravity.CENTER);
-        question.setTypeface(null, Typeface.BOLD);
-        question.setPadding(dp(5), dp(15), dp(5), dp(15));
+
+        question.setGravity(
+                Gravity.CENTER
+        );
+
+        question.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        question.setPadding(
+                dp(5),
+                dp(15),
+                dp(5),
+                dp(15)
+        );
+
         questionCard.addView(question);
+
         root.addView(questionCard);
 
-        root.addView(label("اختار اللاعب:"));
-        Spinner spinner = new Spinner(this);
-        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(55));
-        spinnerParams.setMargins(0, dp(5), 0, dp(10));
-        root.addView(spinner, spinnerParams);
+        root.addView(
+                label("اختار اللاعب:")
+        );
 
-        root.addView(label("توقّع إجابته:"));
-        EditText prediction = input("شنوّة تتوقع جاوب؟");
-        prediction.setFilters(new InputFilter[]{new InputFilter.LengthFilter(MAX_ANSWER_LENGTH)});
+        Spinner spinner =
+                new Spinner(this);
+
+        LinearLayout.LayoutParams spinnerParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(55)
+                );
+
+        spinnerParams.setMargins(
+                0,
+                dp(5),
+                0,
+                dp(10)
+        );
+
+        root.addView(
+                spinner,
+                spinnerParams
+        );
+
+        root.addView(
+                label("توقّع إجابته:")
+        );
+
+        EditText prediction =
+                input(
+                        "شنوّة تتوقع جاوب؟"
+                );
+
+        prediction.setFilters(
+                new InputFilter[]{
+                        new InputFilter.LengthFilter(
+                                MAX_ANSWER_LENGTH
+                        )
+                }
+        );
+
         prediction.setSingleLine(false);
         prediction.setMinHeight(dp(90));
-        prediction.setGravity(Gravity.TOP | Gravity.RIGHT);
-        prediction.setPadding(dp(15), dp(12), dp(15), dp(12));
+
+        prediction.setGravity(
+                Gravity.TOP |
+                        Gravity.RIGHT
+        );
+
+        prediction.setPadding(
+                dp(15),
+                dp(12),
+                dp(15),
+                dp(12)
+        );
+
         root.addView(prediction);
 
-        Button submit = button("🎯 تأكيد التوقع");
+        Button submit =
+                button("🎯 تأكيد التوقع");
+
         root.addView(submit);
-        Button skip = button("⏭️ ما نحبش نتوقع");
+
+        Button skip =
+                button("⏭️ ما نحبش نتوقع");
+
         root.addView(skip);
 
         submit.setEnabled(false);
         skip.setEnabled(false);
-        loadPredictionPlayers(spinner, submit, skip, token);
+
+        loadPredictionPlayers(
+                spinner,
+                submit,
+                skip,
+                token
+        );
 
         submit.setOnClickListener(v ->
-                submitPredictionFromUi(spinner, prediction, submit, skip, false, token));
-        skip.setOnClickListener(v ->
-                submitPredictionFromUi(spinner, prediction, submit, skip, true, token));
+                submitPredictionFromUi(
+                        spinner,
+                        prediction,
+                        submit,
+                        skip,
+                        false,
+                        token
+                )
+        );
 
-        Button chat = button("💬 Chat");
-        chat.setOnClickListener(v -> showChat());
+        skip.setOnClickListener(v ->
+                submitPredictionFromUi(
+                        spinner,
+                        prediction,
+                        submit,
+                        skip,
+                        true,
+                        token
+                )
+        );
+
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
         root.addView(chat);
 
-        setScreen(scroll(root), "prediction");
+        setScreen(
+                scroll(root),
+                "prediction"
+        );
     }
 
-    private void submitPredictionFromUi(Spinner spinner, EditText prediction,
-                                        Button submit, Button skip, boolean skipPrediction, int token) {
-        if (predictionSent) return;
-        Object selected = spinner.getSelectedItem();
+    private void submitPredictionFromUi(
+            Spinner spinner,
+            EditText prediction,
+            Button submit,
+            Button skip,
+            boolean skipPrediction,
+            int token
+    ) {
+
+        if (predictionSent) {
+            return;
+        }
+
+        Object selected =
+                spinner.getSelectedItem();
+
         if (selected == null) {
             toast("اختار لاعب");
             return;
         }
 
-        String target = selected.toString();
-        String predicted = skipPrediction ? "SKIP" : prediction.getText().toString().trim();
-        if (!skipPrediction && predicted.isEmpty()) {
+        String target =
+                selected.toString();
+
+        String predicted =
+                skipPrediction
+                        ? "SKIP"
+                        : prediction
+                                .getText()
+                                .toString()
+                                .trim();
+
+        if (!skipPrediction &&
+                predicted.isEmpty()) {
+
             toast("اكتب توقعك");
             return;
         }
 
         predictionSent = true;
+
         submit.setEnabled(false);
         skip.setEnabled(false);
 
         networkExecutor.execute(() -> {
+
             try {
-                submitPrediction(target, predicted);
+
+                submitPrediction(
+                        target,
+                        predicted
+                );
+
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "prediction")) return;
+
+                    if (!isScreen(
+                            token,
+                            "prediction"
+                    )) {
+                        return;
+                    }
+
                     showPredictionWaiting();
                 });
+
             } catch (Exception e) {
+
                 predictionSent = false;
+
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "prediction")) return;
+
+                    if (!isScreen(
+                            token,
+                            "prediction"
+                    )) {
+                        return;
+                    }
+
                     submit.setEnabled(true);
                     skip.setEnabled(true);
-                    toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                    toast(
+                            "خطأ: " +
+                                    extractSupabaseErrorMessage(e)
+                    );
                 });
             }
         });
     }
 
-    private void loadPredictionPlayers(Spinner spinner, Button submit, Button skip, int token) {
-        networkExecutor.execute(() -> {
-            try {
-                JSONArray players = getPlayers();
-                ArrayList<String> names = new ArrayList<>();
+    private void loadPredictionPlayers(
+            Spinner spinner,
+            Button submit,
+            Button skip,
+            int token
+    ) {
 
-                for (int i = 0; i < players.length(); i++) {
-                    JSONObject p = players.optJSONObject(i);
+        networkExecutor.execute(() -> {
+
+            try {
+
+                JSONArray players =
+                        getPlayers();
+
+                ArrayList<String> names =
+                        new ArrayList<>();
+
+                for (int i = 0;
+                     i < players.length();
+                     i++) {
+
+                    JSONObject p =
+                            players.optJSONObject(i);
+
                     if (p == null) continue;
-                    String name = p.optString("name", "");
-                    if (!name.isEmpty() && !name.equals(playerName)) {
+
+                    String name =
+                            p.optString(
+                                    "name",
+                                    ""
+                            );
+
+                    if (!name.isEmpty() &&
+                            !name.equals(
+                                    playerName
+                            )) {
+
                         names.add(name);
                     }
                 }
 
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "prediction")) return;
-                    if (names.isEmpty()) {
-                        toast("ما فماش لاعب متاح");
+
+                    if (!isScreen(
+                            token,
+                            "prediction"
+                    )) {
                         return;
                     }
 
-                    ArrayAdapter<String> adapter = new ArrayAdapter<String>(
-                            MainActivity.this, android.R.layout.simple_spinner_item, names) {
-                        @Override
-                        public View getView(int position, View convertView, ViewGroup parent) {
-                            TextView view = (TextView) super.getView(position, convertView, parent);
-                            view.setTextColor(textColor);
-                            view.setTextSize(16);
-                            view.setPadding(dp(12), 0, dp(12), 0);
-                            return view;
-                        }
+                    if (names.isEmpty()) {
 
-                        @Override
-                        public View getDropDownView(int position, View convertView, ViewGroup parent) {
-                            TextView view = (TextView) super.getDropDownView(position, convertView, parent);
-                            view.setTextColor(textColor);
-                            view.setTextSize(16);
-                            view.setPadding(dp(12), dp(12), dp(12), dp(12));
-                            return view;
-                        }
-                    };
-                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                        toast(
+                                "ما فماش لاعب متاح"
+                        );
+
+                        return;
+                    }
+
+                    ArrayAdapter<String> adapter =
+                            new ArrayAdapter<String>(
+                                    MainActivity.this,
+                                    android.R.layout.simple_spinner_item,
+                                    names
+                            ) {
+
+                                @Override
+                                public View getView(
+                                        int position,
+                                        View convertView,
+                                        ViewGroup parent
+                                ) {
+
+                                    TextView view =
+                                            (TextView)
+                                                    super.getView(
+                                                            position,
+                                                            convertView,
+                                                            parent
+                                                    );
+
+                                    view.setTextColor(
+                                            textColor
+                                    );
+
+                                    view.setTextSize(16);
+
+                                    view.setPadding(
+                                            dp(12),
+                                            0,
+                                            dp(12),
+                                            0
+                                    );
+
+                                    return view;
+                                }
+
+                                @Override
+                                public View getDropDownView(
+                                        int position,
+                                        View convertView,
+                                        ViewGroup parent
+                                ) {
+
+                                    TextView view =
+                                            (TextView)
+                                                    super.getDropDownView(
+                                                            position,
+                                                            convertView,
+                                                            parent
+                                                    );
+
+                                    view.setTextColor(
+                                            textColor
+                                    );
+
+                                    view.setTextSize(16);
+
+                                    view.setPadding(
+                                            dp(12),
+                                            dp(12),
+                                            dp(12),
+                                            dp(12)
+                                    );
+
+                                    return view;
+                                }
+                            };
+
+                    adapter.setDropDownViewResource(
+                            android.R.layout.simple_spinner_dropdown_item
+                    );
+
                     spinner.setAdapter(adapter);
+
                     submit.setEnabled(true);
                     skip.setEnabled(true);
                 });
+
             } catch (Exception e) {
+
                 runOnUiThread(() -> {
-                    if (isScreen(token, "prediction")) {
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                    if (isScreen(
+                            token,
+                            "prediction"
+                    )) {
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     }
                 });
             }
         });
     }
 
-    private void submitPrediction(String target, String predicted) throws Exception {
-        String key = roomCode + "-" + questionIndex + "-" + playerName;
+    private void submitPrediction(
+            String target,
+            String predicted
+    ) throws Exception {
+
+        String key =
+                roomCode +
+                        "-" +
+                        questionIndex +
+                        "-" +
+                        playerId;
+
         if (submittedPredictionKeys.contains(key)) {
-            throw new Exception("تم إرسال توقعك بالفعل");
+
+            throw new Exception(
+                    "تم إرسال توقعك بالفعل"
+            );
         }
 
-        target = cleanText(target, MAX_NAME_LENGTH);
-        predicted = "SKIP".equals(predicted) ? "SKIP" : cleanText(predicted, MAX_ANSWER_LENGTH);
-        if (target.isEmpty()) throw new Exception("اللاعب المستهدف غير صالح");
+        target =
+                cleanText(
+                        target,
+                        MAX_NAME_LENGTH
+                );
 
-        String targetAnswer = getTargetAnswer(target);
-        boolean correct = !"SKIP".equals(predicted) && similarAnswer(predicted, targetAnswer);
+        predicted =
+                "SKIP".equals(predicted)
+                        ? "SKIP"
+                        : cleanText(
+                                predicted,
+                                MAX_ANSWER_LENGTH
+                        );
+
+        if (target.isEmpty()) {
+            throw new Exception(
+                    "اللاعب المستهدف غير صالح"
+            );
+        }
+
+        String targetAnswer =
+                getTargetAnswer(target);
+
+        boolean correct =
+                !"SKIP".equals(predicted) &&
+                        similarAnswer(
+                                predicted,
+                                targetAnswer
+                        );
+
         int points = 0;
 
         if (correct) {
+
             points = 3;
-            if (normalize(predicted).equals(normalize(targetAnswer))) points += 2;
+
+            if (normalize(predicted)
+                    .equals(
+                            normalize(targetAnswer)
+                    )) {
+
+                points += 2;
+            }
         }
 
-        JSONObject pred = new JSONObject();
-        pred.put("room_code", roomCode);
-        pred.put("round", questionIndex);
-        pred.put("predictor", playerName);
-        pred.put("target", target);
-        pred.put("predicted_answer", predicted);
-        pred.put("correct", correct);
-        pred.put("points", points);
-        pred.put("submitted_at", getCurrentTimestamp());
+        JSONObject pred =
+                new JSONObject();
 
-        request("POST",
-                SUPABASE_URL + "/rest/v1/predictions",
+        pred.put(
+                "room_code",
+                roomCode
+        );
+
+        pred.put(
+                "round",
+                questionIndex
+        );
+
+        pred.put(
+                "predictor",
+                playerName
+        );
+
+        pred.put(
+                "target",
+                target
+        );
+
+        pred.put(
+                "predicted_answer",
+                predicted
+        );
+
+        pred.put(
+                "correct",
+                correct
+        );
+
+        pred.put(
+                "points",
+                points
+        );
+
+        request(
+                "POST",
+                restUrl("/rest/v1/predictions"),
                 pred.toString(),
-                false);
+                false
+        );
 
         if (points > 0) {
+
             score += points;
+
             updateMyScore();
+
             playSuccess();
+
         } else {
+
             playWrong();
         }
 
         submittedPredictionKeys.add(key);
     }
 
-    private String getTargetAnswer(String target) throws Exception {
-        String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-        String encodedTarget = URLEncoder.encode(target, StandardCharsets.UTF_8.name());
-        String query = SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." + encodedCode +
-                       "&round=eq." + questionIndex + "&player_name=eq." + encodedTarget +
-                       "&select=answer&order=created_at.desc&limit=1";
-        String response = request("GET", query, null, false);
-        JSONArray result = safeJsonArray(response);
-        if (result.length() == 0) throw new Exception("إجابة اللاعب غير موجودة");
-        return result.getJSONObject(0).optString("answer", "");
+    private String getTargetAnswer(
+            String target
+    ) throws Exception {
+
+        String query =
+                restUrl(
+                        "/rest/v1/round_answers?room_code=eq."
+                                + encode(roomCode)
+                                + "&round=eq."
+                                + questionIndex
+                                + "&player_name=eq."
+                                + encode(target)
+                                + "&select=answer&limit=1"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
+        JSONArray result =
+                safeJsonArray(response);
+
+        if (result.length() == 0) {
+
+            throw new Exception(
+                    "إجابة اللاعب غير موجودة"
+            );
+        }
+
+        return result
+                .getJSONObject(0)
+                .optString(
+                        "answer",
+                        ""
+                );
     }
 
     // ============================================================
@@ -1749,76 +3997,215 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void showPredictionWaiting() {
-        int token = beginScreen("prediction_waiting");
-        LinearLayout root = root();
-        applyBackground(root, "bg_game");
-        root.addView(title("⏳ تم إرسال التوقع"));
-        root.addView(subtitle("نستنّاو اللاعب الآخر يكمل."));
 
-        TextView counter = subtitle("التوقعات: 0 / 2");
+        int token =
+                beginScreen(
+                        "prediction_waiting"
+                );
+
+        LinearLayout root = root();
+
+        applyBackground(
+                root,
+                "bg_game"
+        );
+
+        root.addView(
+                title("⏳ تم إرسال التوقع")
+        );
+
+        root.addView(
+                subtitle(
+                        "نستنّاو اللاعب الآخر يكمل."
+                )
+        );
+
+        TextView counter =
+                subtitle(
+                        "التوقعات: 0 / 2"
+                );
+
         counter.setTextSize(19);
         counter.setTextColor(accentColor);
+
         root.addView(counter);
 
-        Button chat = button("💬 Chat");
-        chat.setOnClickListener(v -> showChat());
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
         root.addView(chat);
 
-        setScreen(scroll(root), "prediction_waiting");
-        startPredictionPolling(counter, token);
+        setScreen(
+                scroll(root),
+                "prediction_waiting"
+        );
+
+        startPredictionPolling(
+                counter,
+                token
+        );
     }
 
-    private void startPredictionPolling(TextView counter, int token) {
-        Runnable poll = new Runnable() {
-            @Override
-            public void run() {
-                if (!isScreen(token, "prediction_waiting")) return;
-                if (!pollBusy.compareAndSet(false, true)) {
-                    schedulePolling(this, 700L, token, "prediction_waiting");
-                    return;
-                }
+    private void startPredictionPolling(
+            TextView counter,
+            int token
+    ) {
 
-                networkExecutor.execute(() -> {
-                    try {
-                        JSONArray predictions = getPredictions();
-                        JSONArray players = getPlayers();
-                        JSONObject state = getGameState();
-                        String status = state.optString("status", "predicting");
+        Runnable poll =
+                new Runnable() {
 
-                        int uniquePredictions = countUniqueField(predictions, "predictor");
-                        runOnUiThread(() -> {
-                            if (!isScreen(token, "prediction_waiting")) return;
-                            counter.setText("التوقعات: " + uniquePredictions + " / " + Math.min(players.length(), MAX_PLAYERS));
-                            if ("results".equals(status)) {
-                                showResults();
+                    @Override
+                    public void run() {
+
+                        if (!isScreen(
+                                token,
+                                "prediction_waiting"
+                        )) {
+                            return;
+                        }
+
+                        if (!pollBusy.compareAndSet(
+                                false,
+                                true
+                        )) {
+
+                            schedulePolling(
+                                    this,
+                                    700L,
+                                    token,
+                                    "prediction_waiting"
+                            );
+
+                            return;
+                        }
+
+                        networkExecutor.execute(() -> {
+
+                            try {
+
+                                JSONArray predictions =
+                                        getPredictions();
+
+                                JSONArray players =
+                                        getPlayers();
+
+                                JSONObject state =
+                                        getGameState();
+
+                                String status =
+                                        state.optString(
+                                                "status",
+                                                "predicting"
+                                        );
+
+                                int uniquePredictions =
+                                        countUniqueField(
+                                                predictions,
+                                                "predictor"
+                                        );
+
+                                runOnUiThread(() -> {
+
+                                    if (!isScreen(
+                                            token,
+                                            "prediction_waiting"
+                                    )) {
+                                        return;
+                                    }
+
+                                    counter.setText(
+                                            "التوقعات: " +
+                                                    uniquePredictions +
+                                                    " / " +
+                                                    Math.min(
+                                                            players.length(),
+                                                            MAX_PLAYERS
+                                                    )
+                                    );
+
+                                    if ("results".equals(
+                                            status
+                                    )) {
+
+                                        showResults();
+                                    }
+                                });
+
+                                if (uniquePredictions >=
+                                        MAX_PLAYERS &&
+                                        players.length() ==
+                                                MAX_PLAYERS &&
+                                        isHost &&
+                                        "predicting".equals(
+                                                status
+                                        )) {
+
+                                    setGameState(
+                                            questionIndex,
+                                            "results"
+                                    );
+
+                                    runOnUiThread(() -> {
+
+                                        if (isScreen(
+                                                token,
+                                                "prediction_waiting"
+                                        )) {
+
+                                            showResults();
+                                        }
+                                    });
+                                }
+
+                            } catch (Exception ignored) {
+
+                            } finally {
+
+                                pollBusy.set(false);
+
+                                schedulePolling(
+                                        this,
+                                        POLL_GAME,
+                                        token,
+                                        "prediction_waiting"
+                                );
                             }
                         });
-
-                        if (uniquePredictions >= MAX_PLAYERS && players.length() == MAX_PLAYERS && isHost &&
-                                "predicting".equals(status)) {
-                            setGameState(questionIndex, "results");
-                            runOnUiThread(() -> {
-                                if (isScreen(token, "prediction_waiting")) {
-                                    showResults();
-                                }
-                            });
-                        }
-                    } catch (Exception ignored) {
-                    } finally {
-                        pollBusy.set(false);
-                        schedulePolling(this, POLL_GAME, token, "prediction_waiting");
                     }
-                });
-            }
-        };
-        schedulePolling(poll, 900L, token, "prediction_waiting");
+                };
+
+        schedulePolling(
+                poll,
+                900L,
+                token,
+                "prediction_waiting"
+        );
     }
 
-    private JSONArray getPredictions() throws Exception {
-        String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-        String query = SUPABASE_URL + "/rest/v1/predictions?room_code=eq." + encodedCode +
-                       "&round=eq." + questionIndex + "&select=*";
-        String response = request("GET", query, null, false);
+    private JSONArray getPredictions()
+            throws Exception {
+
+        String query =
+                restUrl(
+                        "/rest/v1/predictions?room_code=eq."
+                                + encode(roomCode)
+                                + "&round=eq."
+                                + questionIndex
+                                + "&select=*"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
         return safeJsonArray(response);
     }
 
@@ -1827,338 +4214,894 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void showResults() {
-        int token = beginScreen("results");
+
+        int token =
+                beginScreen("results");
+
         LinearLayout root = root();
-        applyBackground(root, "bg_results");
 
-        root.addView(title("🏆 نتيجة الجولة"));
+        applyBackground(
+                root,
+                "bg_results"
+        );
 
-        LinearLayout scoreCard = card();
-        TextView scoreText = new TextView(this);
-        scoreText.setText("⭐ نقاطك\n" + score);
-        scoreText.setTextColor(accentColor);
+        root.addView(
+                title("🏆 نتيجة الجولة")
+        );
+
+        LinearLayout scoreCard =
+                card();
+
+        TextView scoreText =
+                new TextView(this);
+
+        scoreText.setText(
+                "⭐ نقاطك\n" +
+                        score
+        );
+
+        scoreText.setTextColor(
+                accentColor
+        );
+
         scoreText.setTextSize(28);
-        scoreText.setGravity(Gravity.CENTER);
-        scoreText.setTypeface(null, Typeface.BOLD);
+
+        scoreText.setGravity(
+                Gravity.CENTER
+        );
+
+        scoreText.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
         scoreCard.addView(scoreText);
+
         root.addView(scoreCard);
 
-        loadRoundResult(scoreCard, token);
+        loadRoundResult(
+                scoreCard,
+                token
+        );
 
-        Button next = button("➡️ جاهز للجولة التالية");
+        Button next =
+                button(
+                        "➡️ جاهز للجولة التالية"
+                );
+
         root.addView(next);
+
         next.setOnClickListener(v -> {
+
             if (nextReadySent) return;
+
             nextReadySent = true;
+
             next.setEnabled(false);
+
             networkExecutor.execute(() -> {
+
                 try {
+
                     setPlayerReady(true);
+
                     runOnUiThread(() -> {
-                        if (isScreen(token, "results")) {
+
+                        if (isScreen(
+                                token,
+                                "results"
+                        )) {
+
                             waitForNextRound();
                         }
                     });
+
                 } catch (Exception e) {
+
                     nextReadySent = false;
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "results")) return;
+
+                        if (!isScreen(
+                                token,
+                                "results"
+                        )) {
+                            return;
+                        }
+
                         next.setEnabled(true);
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     });
                 }
             });
         });
 
-        Button chat = button("💬 Chat");
-        chat.setOnClickListener(v -> showChat());
+        Button chat =
+                button("💬 Chat");
+
+        chat.setOnClickListener(
+                v -> showChat()
+        );
+
         root.addView(chat);
 
-        setScreen(scroll(root), "results");
-        startResultsPolling(token, "results");
+        setScreen(
+                scroll(root),
+                "results"
+        );
+
+        startResultsPolling(
+                token,
+                "results"
+        );
     }
 
-    private void loadRoundResult(LinearLayout card, int token) {
-        networkExecutor.execute(() -> {
-            try {
-                String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-                String encodedName = URLEncoder.encode(playerName, StandardCharsets.UTF_8.name());
-                String query = SUPABASE_URL + "/rest/v1/predictions?room_code=eq." + encodedCode +
-                               "&round=eq." + questionIndex + "&predictor=eq." + encodedName +
-                               "&select=*&order=created_at.desc&limit=1";
-                String response = request("GET", query, null, false);
-                JSONArray data = safeJsonArray(response);
-                if (data.length() == 0) return;
+    private void loadRoundResult(
+            LinearLayout card,
+            int token
+    ) {
 
-                JSONObject p = data.getJSONObject(0);
-                boolean correct = p.optBoolean("correct", false);
-                int points = p.optInt("points", 0);
+        networkExecutor.execute(() -> {
+
+            try {
+
+                String query =
+                        restUrl(
+                                "/rest/v1/predictions?room_code=eq."
+                                        + encode(roomCode)
+                                        + "&round=eq."
+                                        + questionIndex
+                                        + "&predictor=eq."
+                                        + encode(playerName)
+                                        + "&select=*&limit=1"
+                        );
+
+                String response =
+                        request(
+                                "GET",
+                                query,
+                                null,
+                                false
+                        );
+
+                JSONArray data =
+                        safeJsonArray(response);
+
+                if (data.length() == 0) {
+                    return;
+                }
+
+                JSONObject p =
+                        data.getJSONObject(0);
+
+                boolean correct =
+                        p.optBoolean(
+                                "correct",
+                                false
+                        );
+
+                int points =
+                        p.optInt(
+                                "points",
+                                0
+                        );
 
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "results")) return;
-                    TextView result = new TextView(this);
-                    result.setText(correct ? "🎯 توقّع صحيح!\n+" + points + " نقاط"
-                            : "❌ التوقع ما صابش\n0 نقاط");
-                    result.setTextColor(textColor);
+
+                    if (!isScreen(
+                            token,
+                            "results"
+                    )) {
+                        return;
+                    }
+
+                    TextView result =
+                            new TextView(
+                                    this
+                            );
+
+                    result.setText(
+                            correct
+                                    ? "🎯 توقّع صحيح!\n+" +
+                                    points +
+                                    " نقاط"
+                                    : "❌ التوقع ما صابش\n0 نقاط"
+                    );
+
+                    result.setTextColor(
+                            textColor
+                    );
+
                     result.setTextSize(18);
-                    result.setGravity(Gravity.CENTER);
-                    result.setPadding(0, dp(15), 0, dp(10));
+
+                    result.setGravity(
+                            Gravity.CENTER
+                    );
+
+                    result.setPadding(
+                            0,
+                            dp(15),
+                            0,
+                            dp(10)
+                    );
+
                     card.addView(result);
                 });
+
             } catch (Exception ignored) {
             }
         });
     }
 
     private void waitForNextRound() {
-        int token = beginScreen("waiting_next");
+
+        int token =
+                beginScreen(
+                        "waiting_next"
+                );
+
         LinearLayout root = root();
-        root.addView(title("⏳ جاهز"));
-        root.addView(subtitle("نستنّاو اللاعب الآخر..."));
-        setScreen(scroll(root), "waiting_next");
-        startResultsPolling(token, "waiting_next");
+
+        root.addView(
+                title("⏳ جاهز")
+        );
+
+        root.addView(
+                subtitle(
+                        "نستنّاو اللاعب الآخر..."
+                )
+        );
+
+        setScreen(
+                scroll(root),
+                "waiting_next"
+        );
+
+        startResultsPolling(
+                token,
+                "waiting_next"
+        );
     }
 
-    private void startResultsPolling(int token, String screenName) {
-        Runnable poll = new Runnable() {
-            @Override
-            public void run() {
-                if (!("results".equals(currentScreen) || "waiting_next".equals(currentScreen)) ||
-                        token != screenToken) return;
-                if (!pollBusy.compareAndSet(false, true)) {
-                    schedulePolling(this, 700L, token, screenName);
-                    return;
-                }
+    private void startResultsPolling(
+            int token,
+            String screenName
+    ) {
 
-                networkExecutor.execute(() -> {
-                    try {
-                        JSONObject state = getGameState();
-                        String status = state.optString("status", "results");
-                        int index = state.optInt("question_index", questionIndex);
-                        JSONArray players = getPlayers();
+        Runnable poll =
+                new Runnable() {
 
-                        boolean allReady = players.length() == MAX_PLAYERS;
-                        for (int i = 0; i < players.length(); i++) {
-                            if (!players.getJSONObject(i).optBoolean("ready", false)) {
-                                allReady = false;
-                                break;
+                    @Override
+                    public void run() {
+
+                        if (token != screenToken ||
+                                !(
+                                        "results".equals(
+                                                currentScreen
+                                        ) ||
+                                                "waiting_next".equals(
+                                                        currentScreen
+                                                )
+                                )) {
+
+                            return;
+                        }
+
+                        if (!pollBusy.compareAndSet(
+                                false,
+                                true
+                        )) {
+
+                            schedulePolling(
+                                    this,
+                                    700L,
+                                    token,
+                                    screenName
+                            );
+
+                            return;
+                        }
+
+                        networkExecutor.execute(() -> {
+
+                            try {
+
+                                JSONObject state =
+                                        getGameState();
+
+                                String status =
+                                        state.optString(
+                                                "status",
+                                                "results"
+                                        );
+
+                                int index =
+                                        state.optInt(
+                                                "question_index",
+                                                questionIndex
+                                        );
+
+                                JSONArray players =
+                                        getPlayers();
+
+                                boolean allReady =
+                                        players.length() ==
+                                                MAX_PLAYERS;
+
+                                for (int i = 0;
+                                     i < players.length();
+                                     i++) {
+
+                                    if (!players
+                                            .getJSONObject(i)
+                                            .optBoolean(
+                                                    "ready",
+                                                    false
+                                            )) {
+
+                                        allReady = false;
+                                        break;
+                                    }
+                                }
+
+                                if ("answering".equals(
+                                        status
+                                )) {
+
+                                    questionIndex =
+                                            clampQuestionIndex(
+                                                    index
+                                            );
+
+                                    runOnUiThread(() -> {
+
+                                        if (token ==
+                                                screenToken &&
+                                                (
+                                                        "results".equals(
+                                                                currentScreen
+                                                        ) ||
+                                                                "waiting_next".equals(
+                                                                        currentScreen
+                                                                )
+                                                )) {
+
+                                            showAnswerScreen();
+                                        }
+                                    });
+
+                                    return;
+                                }
+
+                                if ("finished".equals(
+                                        status
+                                )) {
+
+                                    runOnUiThread(() -> {
+
+                                        if (token ==
+                                                screenToken) {
+
+                                            showLeaderboard();
+                                        }
+                                    });
+
+                                    return;
+                                }
+
+                                if (allReady &&
+                                        isHost &&
+                                        "results".equals(
+                                                status
+                                        )) {
+
+                                    advanceRound();
+                                }
+
+                            } catch (Exception ignored) {
+
+                            } finally {
+
+                                pollBusy.set(false);
+
+                                if (token ==
+                                        screenToken &&
+                                        (
+                                                "results".equals(
+                                                        currentScreen
+                                                ) ||
+                                                        "waiting_next".equals(
+                                                                currentScreen
+                                                        )
+                                        )) {
+
+                                    schedulePolling(
+                                            this,
+                                            POLL_GAME,
+                                            token,
+                                            screenName
+                                    );
+                                }
                             }
-                        }
-
-                        if ("answering".equals(status)) {
-                            questionIndex = Math.max(0, Math.min(index, questions.length - 1));
-                            runOnUiThread(() -> {
-                                if (token == screenToken &&
-                                        ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
-                                    showAnswerScreen();
-                                }
-                            });
-                            return;
-                        }
-
-                        if ("finished".equals(status)) {
-                            runOnUiThread(() -> {
-                                if (token == screenToken &&
-                                        ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
-                                    showLeaderboard();
-                                }
-                            });
-                            return;
-                        }
-
-                        if (allReady && isHost && "results".equals(status)) {
-                            advanceRound();
-                            return;
-                        }
-                    } catch (Exception ignored) {
-                    } finally {
-                        pollBusy.set(false);
-                        if (token == screenToken &&
-                                ("results".equals(currentScreen) || "waiting_next".equals(currentScreen))) {
-                            schedulePolling(this, POLL_GAME, token, screenName);
-                        }
+                        });
                     }
-                });
-            }
-        };
-        schedulePolling(poll, 1000L, token, screenName);
+                };
+
+        schedulePolling(
+                poll,
+                1000L,
+                token,
+                screenName
+        );
     }
 
     private void advanceRound() {
+
         networkExecutor.execute(() -> {
+
             try {
-                int next = questionIndex + 1;
+
+                int next =
+                        questionIndex + 1;
+
                 setAllReady(false);
 
-                if (next >= questions.length) {
-                    setGameState(questionIndex, "finished");
-                    setRoomStatus("waiting");
-                    runOnUiThread(this::showLeaderboard);
+                if (next >=
+                        questions.length) {
+
+                    setGameState(
+                            questionIndex,
+                            "finished"
+                    );
+
+                    setRoomStatus(
+                            "finished"
+                    );
+
+                    runOnUiThread(
+                            this::showLeaderboard
+                    );
+
                     return;
                 }
 
                 questionIndex = next;
+
                 answerSent = false;
                 predictionSent = false;
                 nextReadySent = false;
-                setGameState(questionIndex, "answering");
-                runOnUiThread(this::showAnswerScreen);
+
+                setGameState(
+                        questionIndex,
+                        "answering"
+                );
+
+                runOnUiThread(
+                        this::showAnswerScreen
+                );
+
             } catch (Exception e) {
+
                 runOnUiThread(() ->
-                        toast("خطأ: " + extractSupabaseErrorMessage(e)));
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        )
+                );
             }
         });
     }
 
-    private void showLeaderboard() {
-        stopTimer();
-        int token = beginScreen("leaderboard");
-        LinearLayout root = root();
-        applyBackground(root, "bg_results");
-        root.addView(title("🏆 Leaderboard"));
-        root.addView(subtitle("النتائج النهائية"));
+    // ============================================================
+    // LEADERBOARD
+    // ============================================================
 
-        LinearLayout scoreCard = card();
+    private void showLeaderboard() {
+
+        stopTimer();
+
+        int token =
+                beginScreen(
+                        "leaderboard"
+                );
+
+        LinearLayout root = root();
+
+        applyBackground(
+                root,
+                "bg_results"
+        );
+
+        root.addView(
+                title("🏆 Leaderboard")
+        );
+
+        root.addView(
+                subtitle("النتائج النهائية")
+        );
+
+        LinearLayout scoreCard =
+                card();
+
         root.addView(scoreCard);
 
         networkExecutor.execute(() -> {
+
             try {
-                JSONArray players = getPlayers();
-                List<JSONObject> list = new ArrayList<>();
-                for (int i = 0; i < players.length(); i++) {
-                    list.add(players.getJSONObject(i));
+
+                JSONArray players =
+                        getPlayers();
+
+                List<JSONObject> list =
+                        new ArrayList<>();
+
+                for (int i = 0;
+                     i < players.length();
+                     i++) {
+
+                    JSONObject p =
+                            players.getJSONObject(i);
+
+                    list.add(p);
                 }
-                list.sort((a, b) -> Integer.compare(b.optInt("score", 0), a.optInt("score", 0)));
+
+                list.sort(
+                        (a, b) ->
+                                Integer.compare(
+                                        b.optInt(
+                                                "score",
+                                                0
+                                        ),
+                                        a.optInt(
+                                                "score",
+                                                0
+                                        )
+                                )
+                );
 
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "leaderboard")) return;
+
+                    if (!isScreen(
+                            token,
+                            "leaderboard"
+                    )) {
+                        return;
+                    }
+
                     scoreCard.removeAllViews();
-                    for (int i = 0; i < list.size(); i++) {
-                        JSONObject p = list.get(i);
-                        TextView row = new TextView(MainActivity.this);
-                        String medal = i == 0 ? "🥇" : (i == 1 ? "🥈" : "🏅");
-                        row.setText(medal + "  " + (i + 1) + ". " + p.optString("name", "?") +
-                                "\n      ⭐ " + p.optInt("score", 0) + " نقطة");
-                        row.setTextColor(textColor);
+
+                    for (int i = 0;
+                         i < list.size();
+                         i++) {
+
+                        JSONObject p =
+                                list.get(i);
+
+                        TextView row =
+                                new TextView(
+                                        MainActivity.this
+                                );
+
+                        String medal =
+                                i == 0
+                                        ? "🥇"
+                                        : (
+                                        i == 1
+                                                ? "🥈"
+                                                : "🏅"
+                                );
+
+                        row.setText(
+                                medal +
+                                        "  " +
+                                        (i + 1) +
+                                        ". " +
+                                        p.optString(
+                                                "name",
+                                                "?"
+                                        ) +
+                                        "\n      ⭐ " +
+                                        p.optInt(
+                                                "score",
+                                                0
+                                        ) +
+                                        " نقطة"
+                        );
+
+                        row.setTextColor(
+                                textColor
+                        );
+
                         row.setTextSize(19);
-                        row.setPadding(0, dp(14), 0, dp(14));
+
+                        row.setPadding(
+                                0,
+                                dp(14),
+                                0,
+                                dp(14)
+                        );
+
                         scoreCard.addView(row);
                     }
 
                     if (list.size() == 2) {
-                        int a = list.get(0).optInt("score", 0);
-                        int b = list.get(1).optInt("score", 0);
-                        TextView winner = new TextView(MainActivity.this);
-                        winner.setText(a == b ? "🤝 تعادل!" : "👑 الفائز: " + list.get(0).optString("name", "?"));
-                        winner.setTextColor(accentColor);
+
+                        int a =
+                                list.get(0)
+                                        .optInt(
+                                                "score",
+                                                0
+                                        );
+
+                        int b =
+                                list.get(1)
+                                        .optInt(
+                                                "score",
+                                                0
+                                        );
+
+                        TextView winner =
+                                new TextView(
+                                        MainActivity.this
+                                );
+
+                        winner.setText(
+                                a == b
+                                        ? "🤝 تعادل!"
+                                        : "👑 الفائز: " +
+                                        list.get(0)
+                                                .optString(
+                                                        "name",
+                                                        "?"
+                                                )
+                        );
+
+                        winner.setTextColor(
+                                accentColor
+                        );
+
                         winner.setTextSize(22);
-                        winner.setGravity(Gravity.CENTER);
-                        winner.setTypeface(null, Typeface.BOLD);
-                        winner.setPadding(0, dp(15), 0, dp(5));
-                        scoreCard.addView(winner);
+
+                        winner.setGravity(
+                                Gravity.CENTER
+                        );
+
+                        winner.setTypeface(
+                                null,
+                                Typeface.BOLD
+                        );
+
+                        winner.setPadding(
+                                0,
+                                dp(15),
+                                0,
+                                dp(5)
+                        );
+
+                        scoreCard.addView(
+                                winner
+                        );
                     }
                 });
+
             } catch (Exception ignored) {
             }
         });
 
-        Button playAgain = button("🔄 Play Again");
+        Button playAgain =
+                button("🔄 Play Again");
+
         root.addView(playAgain);
+
         playAgain.setOnClickListener(v -> {
+
             if (!isHost) {
-                toast("الـHost هو اللي يبدأ من جديد");
+
+                toast(
+                        "الـHost هو اللي يبدأ من جديد"
+                );
+
                 return;
             }
+
             playAgain.setEnabled(false);
+
             networkExecutor.execute(() -> {
+
                 try {
+
                     clearMatchData();
                     resetScores();
                     setAllReady(false);
+
                     questionIndex = 0;
+
                     answerSent = false;
                     predictionSent = false;
                     nextReadySent = false;
-                    submittedAnswerKeys.clear();
-                    submittedPredictionKeys.clear();
-                    setRoomStatus("playing");
-                    setGameState(0, "answering");
-                    runOnUiThread(this::showAnswerScreen);
+
+                    clearSubmissionMemory();
+
+                    setRoomStatus(
+                            "playing"
+                    );
+
+                    setGameState(
+                            0,
+                            "answering"
+                    );
+
+                    runOnUiThread(
+                            this::showAnswerScreen
+                    );
+
                 } catch (Exception e) {
+
                     runOnUiThread(() -> {
+
                         playAgain.setEnabled(true);
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     });
                 }
             });
         });
 
-        Button lobby = button("🏠 العودة للـLobby");
-        lobby.setOnClickListener(v -> showLobby());
+        Button lobby =
+                button("🏠 العودة للـLobby");
+
+        lobby.setOnClickListener(
+                v -> showLobby()
+        );
+
         root.addView(lobby);
 
-        Button home = button("🏠 الصفحة الرئيسية");
-        home.setOnClickListener(v -> leaveRoom());
+        Button home =
+                button("🏠 الصفحة الرئيسية");
+
+        home.setOnClickListener(
+                v -> leaveRoom()
+        );
+
         root.addView(home);
 
-        setScreen(scroll(root), "leaderboard");
+        setScreen(
+                scroll(root),
+                "leaderboard"
+        );
     }
 
     // ============================================================
-    // SCORES & READY
+    // SCORES / READY
     // ============================================================
 
-    private void resetScores() throws Exception {
-        JSONArray players = getPlayers();
-        for (int i = 0; i < players.length(); i++) {
-            JSONObject p = players.getJSONObject(i);
-            String id = p.optString("player_id", "");
+    private void resetScores()
+            throws Exception {
+
+        JSONArray players =
+                getPlayers();
+
+        for (int i = 0;
+             i < players.length();
+             i++) {
+
+            JSONObject p =
+                    players.getJSONObject(i);
+
+            String id =
+                    p.optString(
+                            "player_id",
+                            ""
+                    );
+
             if (id.isEmpty()) continue;
 
-            JSONObject update = new JSONObject();
-            update.put("score", 0);
-            update.put("ready", false);
+            JSONObject update =
+                    new JSONObject();
 
-            String encodedId = URLEncoder.encode(id, StandardCharsets.UTF_8.name());
-            request("PATCH",
-                    SUPABASE_URL + "/rest/v1/players?player_id=eq." + encodedId,
+            update.put(
+                    "score",
+                    0
+            );
+
+            update.put(
+                    "ready",
+                    false
+            );
+
+            request(
+                    "PATCH",
+                    restUrl(
+                            "/rest/v1/players?player_id=eq."
+                                    + encode(id)
+                                    + "&room_id=eq."
+                                    + encode(roomId)
+                    ),
                     update.toString(),
-                    false);
+                    false
+            );
         }
+
         score = 0;
     }
 
-    private void updateMyScore() throws Exception {
-        JSONObject update = new JSONObject();
-        update.put("score", score);
+    private void updateMyScore()
+            throws Exception {
 
-        String encodedId = URLEncoder.encode(playerId, StandardCharsets.UTF_8.name());
-        request("PATCH",
-                SUPABASE_URL + "/rest/v1/players?player_id=eq." + encodedId,
+        JSONObject update =
+                new JSONObject();
+
+        update.put(
+                "score",
+                score
+        );
+
+        request(
+                "PATCH",
+                restUrl(
+                        "/rest/v1/players?player_id=eq."
+                                + encode(playerId)
+                                + "&room_id=eq."
+                                + encode(roomId)
+                ),
                 update.toString(),
-                false);
+                false
+        );
     }
 
-    private void setPlayerReady(boolean ready) throws Exception {
-        JSONObject update = new JSONObject();
-        update.put("ready", ready);
+    private void setPlayerReady(
+            boolean ready
+    ) throws Exception {
 
-        String encodedId = URLEncoder.encode(playerId, StandardCharsets.UTF_8.name());
-        request("PATCH",
-                SUPABASE_URL + "/rest/v1/players?player_id=eq." + encodedId,
+        JSONObject update =
+                new JSONObject();
+
+        update.put(
+                "ready",
+                ready
+        );
+
+        request(
+                "PATCH",
+                restUrl(
+                        "/rest/v1/players?player_id=eq."
+                                + encode(playerId)
+                                + "&room_id=eq."
+                                + encode(roomId)
+                ),
                 update.toString(),
-                false);
+                false
+        );
     }
 
-    private void setAllReady(boolean ready) throws Exception {
-        JSONObject update = new JSONObject();
-        update.put("ready", ready);
+    private void setAllReady(
+            boolean ready
+    ) throws Exception {
 
-        String encodedId = URLEncoder.encode(roomId, StandardCharsets.UTF_8.name());
-        request("PATCH",
-                SUPABASE_URL + "/rest/v1/players?room_id=eq." + encodedId,
+        JSONObject update =
+                new JSONObject();
+
+        update.put(
+                "ready",
+                ready
+        );
+
+        request(
+                "PATCH",
+                restUrl(
+                        "/rest/v1/players?room_id=eq."
+                                + encode(roomId)
+                ),
                 update.toString(),
-                false);
+                false
+        );
     }
 
     // ============================================================
@@ -2166,58 +5109,136 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void leaveRoom() {
-        stopAllPolling();
-        networkExecutor.execute(() -> {
-            try {
-                if (isHost && !roomId.isEmpty()) {
-                    JSONArray players = getPlayers();
-                    for (int i = 0; i < players.length(); i++) {
-                        JSONObject p = players.optJSONObject(i);
-                        if (p == null) continue;
-                        String id = p.optString("player_id", "");
-                        if (!id.equals(playerId) && !id.isEmpty()) {
-                            JSONObject update = new JSONObject();
-                            update.put("is_host", true);
 
-                            String encodedId = URLEncoder.encode(id, StandardCharsets.UTF_8.name());
-                            request("PATCH",
-                                    SUPABASE_URL + "/rest/v1/players?player_id=eq." + encodedId,
-                                    update.toString(),
-                                    false);
+        stopAllPolling();
+
+        networkExecutor.execute(() -> {
+
+            try {
+
+                if (!roomId.isEmpty()) {
+
+                    JSONArray players =
+                            getPlayers();
+
+                    JSONObject otherPlayer = null;
+
+                    for (int i = 0;
+                         i < players.length();
+                         i++) {
+
+                        JSONObject p =
+                                players.optJSONObject(i);
+
+                        if (p == null) continue;
+
+                        String id =
+                                p.optString(
+                                        "player_id",
+                                        ""
+                                );
+
+                        if (!id.equals(playerId) &&
+                                !id.isEmpty()) {
+
+                            otherPlayer = p;
                             break;
                         }
                     }
+
+                    if (isHost &&
+                            otherPlayer != null) {
+
+                        String otherId =
+                                otherPlayer.optString(
+                                        "player_id",
+                                        ""
+                                );
+
+                        if (!otherId.isEmpty()) {
+
+                            JSONObject update =
+                                    new JSONObject();
+
+                            update.put(
+                                    "is_host",
+                                    true
+                            );
+
+                            request(
+                                    "PATCH",
+                                    restUrl(
+                                            "/rest/v1/players?player_id=eq."
+                                                    + encode(otherId)
+                                                    + "&room_id=eq."
+                                                    + encode(roomId)
+                                    ),
+                                    update.toString(),
+                                    false
+                            );
+                        }
+
+                    } else if (isHost &&
+                            otherPlayer == null) {
+
+                        // الغرفة فاضية بعد خروج الـHost.
+                        cleanupCreatedRoom(
+                                roomId,
+                                roomCode
+                        );
+
+                        runOnUiThread(() -> {
+
+                            clearRoomState();
+                            showHome();
+                        });
+
+                        return;
+                    }
                 }
 
-                if (!playerId.isEmpty()) {
-                    String encodedId = URLEncoder.encode(playerId, StandardCharsets.UTF_8.name());
-                    request("DELETE",
-                            SUPABASE_URL + "/rest/v1/players?player_id=eq." + encodedId,
-                            null,
-                            false);
-                }
+                deleteCurrentPlayer();
 
                 runOnUiThread(() -> {
+
                     clearRoomState();
+
                     showHome();
                 });
+
             } catch (Exception e) {
+
                 runOnUiThread(() ->
-                        toast("خطأ: " + extractSupabaseErrorMessage(e)));
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        )
+                );
             }
         });
     }
 
     private void clearRoomState() {
+
         roomId = "";
         roomCode = "";
+
         playerName = "";
+
         isHost = false;
+
         score = 0;
         questionIndex = 0;
+
         answerSent = false;
         predictionSent = false;
         nextReadySent = false;
+
+        clearSubmissionMemory();
+    }
+
+    private void clearSubmissionMemory() {
+
         submittedAnswerKeys.clear();
         submittedPredictionKeys.clear();
         submittedMessageKeys.clear();
@@ -2227,43 +5248,100 @@ public class MainActivity extends Activity {
     // GAME STATE
     // ============================================================
 
-    private JSONObject getGameState() throws Exception {
-        String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-        String query = SUPABASE_URL + "/rest/v1/game_state?room_code=eq." + encodedCode +
-                       "&select=*&limit=1";
-        String response = request("GET", query, null, false);
-        JSONArray data = safeJsonArray(response);
-        if (data.length() == 0) throw new Exception("game state not found");
+    private JSONObject getGameState()
+            throws Exception {
+
+        String query =
+                restUrl(
+                        "/rest/v1/game_state?room_code=eq."
+                                + encode(roomCode)
+                                + "&select=*&limit=1"
+                );
+
+        String response =
+                request(
+                        "GET",
+                        query,
+                        null,
+                        false
+                );
+
+        JSONArray data =
+                safeJsonArray(response);
+
+        if (data.length() == 0) {
+
+            throw new Exception(
+                    "حالة اللعبة غير موجودة"
+            );
+        }
+
         return data.getJSONObject(0);
     }
 
-    private void setGameState(int index, String status) throws Exception {
-        JSONObject update = new JSONObject();
-        update.put("question_index", index);
-        update.put("status", status);
-        update.put("updated_at", getCurrentTimestamp());
+    private void setGameState(
+            int index,
+            String status
+    ) throws Exception {
 
-        String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-        request("PATCH",
-                SUPABASE_URL + "/rest/v1/game_state?room_code=eq." + encodedCode,
+        JSONObject update =
+                new JSONObject();
+
+        update.put(
+                "question_index",
+                index
+        );
+
+        update.put(
+                "status",
+                status
+        );
+
+        update.put(
+                "updated_at",
+                getCurrentTimestamp()
+        );
+
+        request(
+                "PATCH",
+                restUrl(
+                        "/rest/v1/game_state?room_code=eq."
+                                + encode(roomCode)
+                ),
                 update.toString(),
-                false);
+                false
+        );
     }
 
-    private void setRoomStatus(String status) throws Exception {
-        JSONObject update = new JSONObject();
-        update.put("status", status);
+    private void setRoomStatus(
+            String status
+    ) throws Exception {
 
-        String encodedId = URLEncoder.encode(roomId, StandardCharsets.UTF_8.name());
-        request("PATCH",
-                SUPABASE_URL + "/rest/v1/rooms?id=eq." + encodedId,
+        JSONObject update =
+                new JSONObject();
+
+        update.put(
+                "status",
+                status
+        );
+
+        request(
+                "PATCH",
+                restUrl(
+                        "/rest/v1/rooms?id=eq."
+                                + encode(roomId)
+                ),
                 update.toString(),
-                false);
+                false
+        );
     }
 
     private String getCurrentTimestamp() {
-        return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
-                .format(new Date());
+
+        return new SimpleDateFormat(
+                "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+                Locale.US
+        ).format(new Date());
     }
 
     // ============================================================
@@ -2271,137 +5349,373 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void showChat() {
-        int token = beginScreen("chat");
-        LinearLayout root = root();
-        root.addView(title("💬 Chat"));
-        root.addView(subtitle("احكوا مع بعض أثناء اللعب."));
 
-        LinearLayout messages = card();
+        int token =
+                beginScreen("chat");
+
+        LinearLayout root = root();
+
+        root.addView(
+                title("💬 Chat")
+        );
+
+        root.addView(
+                subtitle(
+                        "احكوا مع بعض أثناء اللعب."
+                )
+        );
+
+        LinearLayout messages =
+                card();
+
         root.addView(messages);
 
-        EditText message = input("اكتب رسالة...");
-        message.setFilters(new InputFilter[]{new InputFilter.LengthFilter(MAX_MESSAGE_LENGTH)});
+        EditText message =
+                input("اكتب رسالة...");
+
+        message.setFilters(
+                new InputFilter[]{
+                        new InputFilter.LengthFilter(
+                                MAX_MESSAGE_LENGTH
+                        )
+                }
+        );
+
         message.setSingleLine(false);
         message.setMinHeight(dp(65));
-        message.setGravity(Gravity.TOP | Gravity.RIGHT);
-        message.setPadding(dp(15), dp(10), dp(15), dp(10));
+
+        message.setGravity(
+                Gravity.TOP |
+                        Gravity.RIGHT
+        );
+
+        message.setPadding(
+                dp(15),
+                dp(10),
+                dp(15),
+                dp(10)
+        );
+
         root.addView(message);
 
-        Button send = button("📤 إرسال");
-        root.addView(send);
-        send.setOnClickListener(v -> {
-            String text = cleanText(message.getText().toString(), MAX_MESSAGE_LENGTH);
-            if (text.isEmpty()) return;
+        Button send =
+                button("📤 إرسال");
 
-            String msgKey = roomId + "-" + getCurrentTimestamp() + "-" + text;
-            if (submittedMessageKeys.contains(msgKey)) {
-                toast("لا تكرر نفس الرسالة");
+        root.addView(send);
+
+        send.setOnClickListener(v -> {
+
+            String text =
+                    cleanText(
+                            message.getText().toString(),
+                            MAX_MESSAGE_LENGTH
+                    );
+
+            if (text.isEmpty()) {
                 return;
             }
 
-            setBusy(send, true, "⏳ ...", "📤 إرسال");
+            String msgKey =
+                    roomId +
+                            "-" +
+                            playerId +
+                            "-" +
+                            text +
+                            "-" +
+                            System.currentTimeMillis();
+
+            setBusy(
+                    send,
+                    true,
+                    "⏳ ...",
+                    "📤 إرسال"
+            );
 
             networkExecutor.execute(() -> {
+
                 try {
-                    JSONObject object = new JSONObject();
-                    object.put("room_id", roomId);
-                    object.put("player_name", playerName);
-                    object.put("message", text);
-                    object.put("sent_at", getCurrentTimestamp());
 
-                    request("POST",
-                            SUPABASE_URL + "/rest/v1/messages",
+                    JSONObject object =
+                            new JSONObject();
+
+                    object.put(
+                            "room_id",
+                            roomId
+                    );
+
+                    object.put(
+                            "player_name",
+                            playerName
+                    );
+
+                    object.put(
+                            "message",
+                            text
+                    );
+
+                    /*
+                     * لا نرسل sent_at هنا.
+                     * نخلي created_at الافتراضي في Supabase
+                     * إذا كان موجودًا في الجدول.
+                     */
+
+                    request(
+                            "POST",
+                            restUrl("/rest/v1/messages"),
                             object.toString(),
-                            false);
+                            false
+                    );
 
-                    submittedMessageKeys.add(msgKey);
+                    submittedMessageKeys.add(
+                            msgKey
+                    );
 
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "chat")) return;
+
+                        if (!isScreen(
+                                token,
+                                "chat"
+                        )) {
+                            return;
+                        }
+
                         message.setText("");
-                        setBusy(send, false, "⏳ ...", "📤 إرسال");
+
+                        setBusy(
+                                send,
+                                false,
+                                "⏳ ...",
+                                "📤 إرسال"
+                        );
+
                         playSuccess();
-                        loadMessages(messages, token);
+
+                        loadMessages(
+                                messages,
+                                token
+                        );
                     });
+
                 } catch (Exception e) {
+
                     runOnUiThread(() -> {
-                        if (!isScreen(token, "chat")) return;
-                        setBusy(send, false, "⏳ ...", "📤 إرسال");
-                        toast("خطأ: " + extractSupabaseErrorMessage(e));
+
+                        if (!isScreen(
+                                token,
+                                "chat"
+                        )) {
+                            return;
+                        }
+
+                        setBusy(
+                                send,
+                                false,
+                                "⏳ ...",
+                                "📤 إرسال"
+                        );
+
+                        toast(
+                                "خطأ: " +
+                                        extractSupabaseErrorMessage(e)
+                        );
                     });
                 }
             });
         });
 
-        Button back = button("رجوع");
+        Button back =
+                button("رجوع");
+
         back.setOnClickListener(v -> {
+
             if (!roomCode.isEmpty()) {
                 showLobby();
             } else {
                 showHome();
             }
         });
+
         root.addView(back);
 
-        setScreen(scroll(root), "chat");
-        loadMessages(messages, token);
-        startChatPolling(messages, token);
+        setScreen(
+                scroll(root),
+                "chat"
+        );
+
+        loadMessages(
+                messages,
+                token
+        );
+
+        startChatPolling(
+                messages,
+                token
+        );
     }
 
-    private void loadMessages(LinearLayout container, int token) {
+    private void loadMessages(
+            LinearLayout container,
+            int token
+    ) {
+
         networkExecutor.execute(() -> {
+
             try {
-                String encodedId = URLEncoder.encode(roomId, StandardCharsets.UTF_8.name());
-                String query = SUPABASE_URL + "/rest/v1/messages?room_id=eq." + encodedId +
-                               "&select=*&order=created_at.desc&limit=50";
-                String response = request("GET", query, null, false);
-                JSONArray data = safeJsonArray(response);
+
+                String query =
+                        restUrl(
+                                "/rest/v1/messages?room_id=eq."
+                                        + encode(roomId)
+                                        + "&select=*&order=created_at.desc&limit=50"
+                        );
+
+                String response =
+                        request(
+                                "GET",
+                                query,
+                                null,
+                                false
+                        );
+
+                JSONArray data =
+                        safeJsonArray(response);
 
                 runOnUiThread(() -> {
-                    if (!isScreen(token, "chat")) return;
-                    renderMessages(container, data);
+
+                    if (!isScreen(
+                            token,
+                            "chat"
+                    )) {
+                        return;
+                    }
+
+                    renderMessages(
+                            container,
+                            data
+                    );
                 });
+
             } catch (Exception ignored) {
             }
         });
     }
 
-    private void renderMessages(LinearLayout container, JSONArray data) {
+    private void renderMessages(
+            LinearLayout container,
+            JSONArray data
+    ) {
+
         container.removeAllViews();
+
         if (data.length() == 0) {
-            TextView empty = new TextView(this);
-            empty.setText("ما فما حتى رسالة 👀");
-            empty.setTextColor(secondaryTextColor);
-            empty.setGravity(Gravity.CENTER);
+
+            TextView empty =
+                    new TextView(this);
+
+            empty.setText(
+                    "ما فما حتى رسالة 👀"
+            );
+
+            empty.setTextColor(
+                    secondaryTextColor
+            );
+
+            empty.setGravity(
+                    Gravity.CENTER
+            );
+
             container.addView(empty);
+
             return;
         }
 
-        for (int i = data.length() - 1; i >= 0; i--) {
-            JSONObject m = data.optJSONObject(i);
-            if (m == null) continue;
-            String name = m.optString("player_name", "?");
-            String text = m.optString("message", "");
+        for (int i =
+             data.length() - 1;
+             i >= 0;
+             i--) {
 
-            TextView row = new TextView(this);
-            row.setText("👤 " + name + "\n   " + text);
-            row.setTextColor(textColor);
+            JSONObject m =
+                    data.optJSONObject(i);
+
+            if (m == null) continue;
+
+            String name =
+                    m.optString(
+                            "player_name",
+                            "?"
+                    );
+
+            String text =
+                    m.optString(
+                            "message",
+                            ""
+                    );
+
+            TextView row =
+                    new TextView(this);
+
+            row.setText(
+                    "👤 " +
+                            name +
+                            "\n   " +
+                            text
+            );
+
+            row.setTextColor(
+                    textColor
+            );
+
             row.setTextSize(15);
-            row.setPadding(0, dp(8), 0, dp(8));
+
+            row.setPadding(
+                    0,
+                    dp(8),
+                    0,
+                    dp(8)
+            );
+
             container.addView(row);
         }
     }
 
-    private void startChatPolling(LinearLayout messages, int token) {
-        Runnable poll = new Runnable() {
-            @Override
-            public void run() {
-                if (!isScreen(token, "chat")) return;
-                loadMessages(messages, token);
-                schedulePolling(this, POLL_CHAT, token, "chat");
-            }
-        };
-        schedulePolling(poll, POLL_CHAT, token, "chat");
+    private void startChatPolling(
+            LinearLayout messages,
+            int token
+    ) {
+
+        Runnable poll =
+                new Runnable() {
+
+                    @Override
+                    public void run() {
+
+                        if (!isScreen(
+                                token,
+                                "chat"
+                        )) {
+                            return;
+                        }
+
+                        loadMessages(
+                                messages,
+                                token
+                        );
+
+                        schedulePolling(
+                                this,
+                                POLL_CHAT,
+                                token,
+                                "chat"
+                        );
+                    }
+                };
+
+        schedulePolling(
+                poll,
+                POLL_CHAT,
+                token,
+                "chat"
+        );
     }
 
     // ============================================================
@@ -2409,197 +5723,515 @@ public class MainActivity extends Activity {
     // ============================================================
 
     private void showSettings() {
-        int token = beginScreen("settings");
-        LinearLayout root = root();
-        root.addView(title("⚙️ الإعدادات"));
 
-        LinearLayout appearance = card();
-        TextView appearanceText = new TextView(this);
-        appearanceText.setText("🎨 المظهر\n\n" +
-                (darkMode ? "🌙 الوضع الداكن مفعل" : "☀️ الوضع الفاتح مفعل"));
-        appearanceText.setTextColor(textColor);
+        int token =
+                beginScreen("settings");
+
+        LinearLayout root = root();
+
+        root.addView(
+                title("⚙️ الإعدادات")
+        );
+
+        LinearLayout appearance =
+                card();
+
+        TextView appearanceText =
+                new TextView(this);
+
+        appearanceText.setText(
+                "🎨 المظهر\n\n" +
+                        (
+                                darkMode
+                                        ? "🌙 الوضع الداكن مفعل"
+                                        : "☀️ الوضع الفاتح مفعل"
+                        )
+        );
+
+        appearanceText.setTextColor(
+                textColor
+        );
+
         appearanceText.setTextSize(18);
-        appearance.addView(appearanceText);
+
+        appearance.addView(
+                appearanceText
+        );
+
         root.addView(appearance);
 
-        Button dark = button(darkMode ? "☀️ الوضع الفاتح" : "🌙 الوضع الداكن");
-        dark.setOnClickListener(v -> toggleDarkMode());
+        Button dark =
+                button(
+                        darkMode
+                                ? "☀️ الوضع الفاتح"
+                                : "🌙 الوضع الداكن"
+                );
+
+        dark.setOnClickListener(
+                v -> toggleDarkMode()
+        );
+
         root.addView(dark);
 
-        LinearLayout audio = card();
-        TextView audioText = new TextView(this);
-        audioText.setText("🎵 الصوت\n\n" +
-                (musicEnabled ? "🎵 الموسيقى مفعلة" : "🔇 الموسيقى متوقفة") + "\n" +
-                (soundEnabled ? "🔊 المؤثرات مفعلة" : "🔇 المؤثرات متوقفة"));
-        audioText.setTextColor(textColor);
+        LinearLayout audio =
+                card();
+
+        TextView audioText =
+                new TextView(this);
+
+        audioText.setText(
+                "🎵 الصوت\n\n" +
+                        (
+                                musicEnabled
+                                        ? "🎵 الموسيقى مفعلة"
+                                        : "🔇 الموسيقى متوقفة"
+                        ) +
+                        "\n" +
+                        (
+                                soundEnabled
+                                        ? "🔊 المؤثرات مفعلة"
+                                        : "🔇 المؤثرات متوقفة"
+                        )
+        );
+
+        audioText.setTextColor(
+                textColor
+        );
+
         audioText.setTextSize(18);
+
         audio.addView(audioText);
+
         root.addView(audio);
 
-        Button music = button(musicEnabled ? "🔇 إيقاف الموسيقى" : "🎵 تشغيل الموسيقى");
-        music.setOnClickListener(v -> toggleMusic());
+        Button music =
+                button(
+                        musicEnabled
+                                ? "🔇 إيقاف الموسيقى"
+                                : "🎵 تشغيل الموسيقى"
+                );
+
+        music.setOnClickListener(
+                v -> toggleMusic()
+        );
+
         root.addView(music);
 
-        Button sound = button(soundEnabled ? "🔇 إيقاف المؤثرات" : "🔊 تشغيل المؤثرات");
-        sound.setOnClickListener(v -> toggleSound());
+        Button sound =
+                button(
+                        soundEnabled
+                                ? "🔇 إيقاف المؤثرات"
+                                : "🔊 تشغيل المؤثرات"
+                );
+
+        sound.setOnClickListener(
+                v -> toggleSound()
+        );
+
         root.addView(sound);
 
-        LinearLayout about = card();
-        TextView aboutText = new TextView(this);
-        aboutText.setText("🎮 GuessUs\n\n" +
-                "لعبة توقع إجابات صاحبك.\n" +
-                "👥 لاعبان • 🎯 توقعات • 🏆 نقاط\n" +
-                "💬 Chat • 🎵 موسيقى\n\n" +
-                "الإصدار 1.0");
-        aboutText.setTextColor(textColor);
+        LinearLayout about =
+                card();
+
+        TextView aboutText =
+                new TextView(this);
+
+        aboutText.setText(
+                "🎮 GuessUs\n\n" +
+                        "لعبة توقع إجابات صاحبك.\n" +
+                        "👥 لاعبان • 🎯 توقعات • 🏆 نقاط\n" +
+                        "💬 Chat • 🎵 موسيقى\n\n" +
+                        "الإصدار 1.0"
+        );
+
+        aboutText.setTextColor(
+                textColor
+        );
+
         aboutText.setTextSize(16);
-        aboutText.setGravity(Gravity.CENTER);
+
+        aboutText.setGravity(
+                Gravity.CENTER
+        );
+
         about.addView(aboutText);
+
         root.addView(about);
 
-        Button back = button("رجوع");
-        back.setOnClickListener(v -> showHome());
+        Button back =
+                button("رجوع");
+
+        back.setOnClickListener(
+                v -> showHome()
+        );
+
         root.addView(back);
 
-        setScreen(scroll(root), "settings");
+        setScreen(
+                scroll(root),
+                "settings"
+        );
     }
 
     // ============================================================
     // DATA MANAGEMENT
     // ============================================================
 
-    private void clearMatchData() throws Exception {
-        String encodedCode = URLEncoder.encode(roomCode, StandardCharsets.UTF_8.name());
-        request("DELETE",
-                SUPABASE_URL + "/rest/v1/round_answers?room_code=eq." + encodedCode,
+    private void clearMatchData()
+            throws Exception {
+
+        request(
+                "DELETE",
+                restUrl(
+                        "/rest/v1/round_answers?room_code=eq."
+                                + encode(roomCode)
+                ),
                 null,
-                false);
-        request("DELETE",
-                SUPABASE_URL + "/rest/v1/predictions?room_code=eq." + encodedCode,
+                false
+        );
+
+        request(
+                "DELETE",
+                restUrl(
+                        "/rest/v1/predictions?room_code=eq."
+                                + encode(roomCode)
+                ),
                 null,
-                false);
+                false
+        );
     }
 
     // ============================================================
-    // TEXT NORMALIZATION
+    // NORMALIZATION
     // ============================================================
 
-    private String normalize(String value) {
-        if (value == null) return "";
-        String s = value.trim().toLowerCase(Locale.ROOT);
-        s = s.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا");
-        s = s.replace("ة", "ه").replace("ى", "ي").replace("ؤ", "و").replace("ئ", "ي");
-        s = s.replace("گ", "ك").replace("پ", "ب").replace("چ", "ج").replace("ڨ", "ق");
-        s = s.replaceAll("[ًٌٍَُِّْـ]", "");
-        s = s.replaceAll("[^\\p{L}\\p{N}\\s]", "");
-        s = s.replaceAll("\\s+", " ");
+    private String normalize(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        String s =
+                value
+                        .trim()
+                        .toLowerCase(
+                                Locale.ROOT
+                        );
+
+        s = s
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا");
+
+        s = s
+                .replace("ة", "ه")
+                .replace("ى", "ي")
+                .replace("ؤ", "و")
+                .replace("ئ", "ي");
+
+        s = s
+                .replace("گ", "ك")
+                .replace("پ", "ب")
+                .replace("چ", "ج")
+                .replace("ڨ", "ق");
+
+        s = s.replaceAll(
+                "[ًٌٍَُِّْـ]",
+                ""
+        );
+
+        s = s.replaceAll(
+                "[^\\p{L}\\p{N}\\s]",
+                ""
+        );
+
+        s = s.replaceAll(
+                "\\s+",
+                " "
+        );
+
         return s.trim();
     }
 
-    private boolean similarAnswer(String a, String b) {
-        if (a == null || b == null) return false;
-        String x = normalize(a);
-        String y = normalize(b);
-        if (x.isEmpty() || y.isEmpty()) return false;
-        if (x.equals(y)) return true;
+    private boolean similarAnswer(
+            String a,
+            String b
+    ) {
 
-        if (x.length() >= 3 && y.length() >= 3 && (x.contains(y) || y.contains(x))) {
+        if (a == null || b == null) {
+            return false;
+        }
+
+        String x =
+                normalize(a);
+
+        String y =
+                normalize(b);
+
+        if (x.isEmpty() ||
+                y.isEmpty()) {
+            return false;
+        }
+
+        if (x.equals(y)) {
             return true;
         }
 
-        String[] wordsX = x.split(" ");
-        String[] wordsY = y.split(" ");
-        int matches = 0;
+        if (x.length() >= 3 &&
+                y.length() >= 3 &&
+                (
+                        x.contains(y) ||
+                                y.contains(x)
+                )) {
+
+            return true;
+        }
+
+        String[] wordsX =
+                x.split(" ");
+
+        String[] wordsY =
+                y.split(" ");
+
         for (String wx : wordsX) {
+
             for (String wy : wordsY) {
-                if (wx.equals(wy) && wx.length() >= 3) {
-                    matches++;
+
+                if (wx.equals(wy) &&
+                        wx.length() >= 3) {
+
+                    return true;
                 }
             }
         }
-        return matches > 0;
+
+        return false;
     }
 
     // ============================================================
-    // HTTP REQUEST SYSTEM (IMPROVED)
+    // SUPABASE VALIDATION
     // ============================================================
 
-    private void validateSupabase() throws Exception {
-        if (SUPABASE_URL == null || SUPABASE_URL.trim().isEmpty() ||
-                SUPABASE_URL.contains("${") || SUPABASE_URL.contains("null")) {
-            throw new Exception("SUPABASE_URL غير مضبوط");
-        }
-        if (SUPABASE_KEY == null || SUPABASE_KEY.trim().isEmpty() ||
-                SUPABASE_KEY.contains("${") || SUPABASE_KEY.contains("null")) {
-            throw new Exception("SUPABASE_KEY غير مضبوط");
-        }
-    }
-
-    private String request(String method, String urlString, String body, boolean returnRepresentation) 
+    private void validateSupabase()
             throws Exception {
+
+        String url =
+                getSupabaseBaseUrl();
+
+        if (url.isEmpty() ||
+                url.contains("${") ||
+                url.contains("null") ||
+                !url.startsWith("https://")) {
+
+            throw new Exception(
+                    "SUPABASE_URL غير صحيح"
+            );
+        }
+
+        if (SUPABASE_KEY == null ||
+                SUPABASE_KEY.trim().isEmpty() ||
+                SUPABASE_KEY.contains("${") ||
+                SUPABASE_KEY.contains("null")) {
+
+            throw new Exception(
+                    "SUPABASE_KEY غير مضبوط"
+            );
+        }
+    }
+
+    // ============================================================
+    // HTTP
+    // ============================================================
+
+    private String request(
+            String method,
+            String urlString,
+            String body,
+            boolean returnRepresentation
+    ) throws Exception {
+
         validateSupabase();
+
+        if (urlString == null ||
+                urlString.trim().isEmpty()) {
+
+            throw new Exception(
+                    "Request URL فارغ"
+            );
+        }
+
+        String cleanUrl =
+                urlString.trim();
+
+        if (cleanUrl.contains(" ")) {
+
+            throw new Exception(
+                    "Request URL يحتوي على مسافات"
+            );
+        }
+
         HttpURLConnection connection = null;
 
         try {
-            URL url = new URL(urlString);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod(method);
-            connection.setConnectTimeout(NETWORK_TIMEOUT);
-            connection.setReadTimeout(READ_TIMEOUT);
+
+            URL url =
+                    new URL(cleanUrl);
+
+            connection =
+                    (HttpURLConnection)
+                            url.openConnection();
+
+            connection.setRequestMethod(
+                    method
+            );
+
+            connection.setConnectTimeout(
+                    NETWORK_TIMEOUT
+            );
+
+            connection.setReadTimeout(
+                    READ_TIMEOUT
+            );
+
             connection.setUseCaches(false);
             connection.setDoInput(true);
 
-            // Headers
-            connection.setRequestProperty("apikey", SUPABASE_KEY);
-            connection.setRequestProperty("Authorization", "Bearer " + SUPABASE_KEY);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", "GuessUs-Android/1.0");
-            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            connection.setRequestProperty(
+                    "apikey",
+                    SUPABASE_KEY
+            );
 
-            if ("POST".equalsIgnoreCase(method) || "PATCH".equalsIgnoreCase(method)) {
-                connection.setRequestProperty("Prefer",
-                        returnRepresentation ? "return=representation" : "return=minimal");
+            connection.setRequestProperty(
+                    "Authorization",
+                    "Bearer " +
+                            SUPABASE_KEY
+            );
+
+            connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+            );
+
+            connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=UTF-8"
+            );
+
+            connection.setRequestProperty(
+                    "User-Agent",
+                    "GuessUs-Android/1.0"
+            );
+
+            if ("POST".equalsIgnoreCase(method) ||
+                    "PATCH".equalsIgnoreCase(method)) {
+
+                connection.setRequestProperty(
+                        "Prefer",
+                        returnRepresentation
+                                ? "return=representation"
+                                : "return=minimal"
+                );
             }
 
-            // Send body
-            if (body != null && !"GET".equalsIgnoreCase(method) && !"DELETE".equalsIgnoreCase(method)) {
+            if (body != null &&
+                    !"GET".equalsIgnoreCase(method) &&
+                    !"DELETE".equalsIgnoreCase(method)) {
+
                 connection.setDoOutput(true);
-                byte[] data = body.getBytes(StandardCharsets.UTF_8);
-                try (OutputStream output = connection.getOutputStream()) {
+
+                byte[] data =
+                        body.getBytes(
+                                StandardCharsets.UTF_8
+                        );
+
+                try (OutputStream output =
+                             connection.getOutputStream()) {
+
                     output.write(data);
                     output.flush();
                 }
             }
 
-            // Read response
-            int responseCode = connection.getResponseCode();
-            InputStream input = (responseCode >= 200 && responseCode < 300) ?
-                    connection.getInputStream() : connection.getErrorStream();
+            int responseCode =
+                    connection.getResponseCode();
+
+            InputStream input =
+                    responseCode >= 200 &&
+                            responseCode < 300
+                            ? connection.getInputStream()
+                            : connection.getErrorStream();
 
             String responseBody = "";
+
             if (input != null) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                    StringBuilder result = new StringBuilder();
+
+                try (
+                        BufferedReader reader =
+                                new BufferedReader(
+                                        new InputStreamReader(
+                                                input,
+                                                StandardCharsets.UTF_8
+                                        )
+                                )
+                ) {
+
+                    StringBuilder result =
+                            new StringBuilder();
+
                     String line;
-                    while ((line = reader.readLine()) != null) {
+
+                    while (
+                            (line =
+                                    reader.readLine())
+                                    != null
+                    ) {
+
                         result.append(line);
                     }
-                    responseBody = result.toString();
+
+                    responseBody =
+                            result.toString();
                 }
             }
 
-            // Handle errors
-            if (responseCode < 200 || responseCode >= 300) {
-                throw new HttpException(responseCode, responseBody);
+            if (responseCode < 200 ||
+                    responseCode >= 300) {
+
+                throw new HttpException(
+                        responseCode,
+                        responseBody
+                );
             }
 
             return responseBody;
 
+        } catch (HttpException e) {
+
+            throw e;
+
         } catch (IOException e) {
-            throw new Exception("خطأ في الاتصال: " + e.getMessage());
+
+            String message =
+                    e.getMessage();
+
+            if (message == null ||
+                    message.trim().isEmpty()) {
+
+                message =
+                        "تعذر الاتصال بالسيرفر";
+            }
+
+            throw new Exception(
+                    "خطأ في الاتصال: " +
+                            message
+            );
+
         } finally {
+
             if (connection != null) {
+
                 try {
                     connection.disconnect();
                 } catch (Exception ignored) {
@@ -2608,67 +6240,227 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String extractSupabaseErrorMessage(Exception e) {
-        if (e == null) return "حدث خطأ غير متوقع";
+    // ============================================================
+    // SUPABASE ERROR PARSER
+    // ============================================================
+
+    private String extractSupabaseErrorMessage(
+            Exception e
+    ) {
+
+        if (e == null) {
+            return "حدث خطأ غير متوقع";
+        }
 
         if (e instanceof HttpException) {
-            HttpException he = (HttpException) e;
-            int code = he.statusCode;
 
-            // محاولة استخراج رسالة من JSON
-            try {
-                JSONObject error = new JSONObject(he.body);
-                String message = error.optString("message", null);
-                if (message != null && !message.isEmpty()) {
-                    return message;
+            HttpException he =
+                    (HttpException) e;
+
+            String parsed =
+                    parseSupabaseErrorBody(
+                            he.body
+                    );
+
+            if (!parsed.isEmpty()) {
+                return "HTTP " +
+                        he.statusCode +
+                        ": " +
+                        parsed;
+            }
+
+            switch (he.statusCode) {
+
+                case 400:
+                    return "HTTP 400: طلب غير صحيح";
+
+                case 401:
+                    return "HTTP 401: غير مصرح";
+
+                case 403:
+                    return "HTTP 403: الدخول مرفوض - راجع RLS";
+
+                case 404:
+                    return "HTTP 404: المسار أو المورد غير موجود";
+
+                case 409:
+                    return "HTTP 409: تعارض في البيانات";
+
+                case 500:
+                    return "HTTP 500: خطأ في السيرفر";
+
+                default:
+                    return "HTTP " +
+                            he.statusCode;
+            }
+        }
+
+        String msg =
+                e.getMessage();
+
+        if (msg == null ||
+                msg.trim().isEmpty()) {
+
+            return "حدث خطأ غير متوقع";
+        }
+
+        return msg;
+    }
+
+    private String parseSupabaseErrorBody(
+            String body
+    ) {
+
+        if (body == null ||
+                body.trim().isEmpty()) {
+
+            return "";
+        }
+
+        try {
+
+            JSONObject obj =
+                    new JSONObject(body);
+
+            String message =
+                    obj.optString(
+                            "message",
+                            ""
+                    );
+
+            String details =
+                    obj.optString(
+                            "details",
+                            ""
+                    );
+
+            String hint =
+                    obj.optString(
+                            "hint",
+                            ""
+                    );
+
+            String code =
+                    obj.optString(
+                            "code",
+                            ""
+                    );
+
+            StringBuilder result =
+                    new StringBuilder();
+
+            if (!message.isEmpty()) {
+                result.append(message);
+            }
+
+            if (!details.isEmpty()) {
+
+                if (result.length() > 0) {
+                    result.append(" | ");
                 }
-            } catch (JSONException ignored) {
+
+                result.append(details);
             }
 
-            // رسائل HTTP معروفة
-            switch (code) {
-                case 400: return "طلب غير صحيح";
-                case 401: return "غير مصرح";
-                case 403: return "الدخول مرفوض";
-                case 404: return "الموارد غير موجودة";
-                case 409: return "تعارض في البيانات";
-                case 500: return "خطأ في السيرفر";
-                default: return "خطأ HTTP " + code;
+            if (!hint.isEmpty()) {
+
+                if (result.length() > 0) {
+                    result.append(" | ");
+                }
+
+                result.append(hint);
             }
+
+            if (!code.isEmpty()) {
+
+                if (result.length() > 0) {
+                    result.append(" | ");
+                }
+
+                result.append(
+                        "code="
+                ).append(code);
+            }
+
+            return result.toString();
+
+        } catch (JSONException ignored) {
+
+            return body.length() > 500
+                    ? body.substring(0, 500)
+                    : body;
         }
-
-        String msg = e.getMessage();
-        return (msg != null && !msg.isEmpty()) ? msg : "حدث خطأ غير متوقع";
     }
 
-    private JSONArray safeJsonArray(String value) throws Exception {
-        if (value == null || value.trim().isEmpty()) {
+    // ============================================================
+    // JSON
+    // ============================================================
+
+    private JSONArray safeJsonArray(
+            String value
+    ) throws Exception {
+
+        if (value == null ||
+                value.trim().isEmpty()) {
+
             return new JSONArray();
         }
-        String trimmed = value.trim();
+
+        String trimmed =
+                value.trim();
+
         if (trimmed.startsWith("[")) {
-            return new JSONArray(trimmed);
-        } else if (trimmed.startsWith("{")) {
-            JSONArray array = new JSONArray();
-            array.put(new JSONObject(trimmed));
+
+            return new JSONArray(
+                    trimmed
+            );
+
+        } else if (
+                trimmed.startsWith("{")
+        ) {
+
+            JSONArray array =
+                    new JSONArray();
+
+            array.put(
+                    new JSONObject(trimmed)
+            );
+
             return array;
+
         } else {
+
             return new JSONArray();
         }
     }
 
     // ============================================================
-    // HTTP EXCEPTION CLASS
+    // HTTP EXCEPTION
     // ============================================================
 
-    private static class HttpException extends Exception {
-        int statusCode;
-        String body;
+    private static class HttpException
+            extends Exception {
 
-        HttpException(int statusCode, String body) {
-            super("HTTP " + statusCode);
-            this.statusCode = statusCode;
-            this.body = body;
+        final int statusCode;
+        final String body;
+
+        HttpException(
+                int statusCode,
+                String body
+        ) {
+
+            super(
+                    "HTTP " +
+                            statusCode
+            );
+
+            this.statusCode =
+                    statusCode;
+
+            this.body =
+                    body == null
+                            ? ""
+                            : body;
         }
     }
     }
