@@ -282,8 +282,10 @@ public class MainActivity extends Activity {
         }
 
         Window window = getWindow();
+        // Compatible with Android 9 on Galaxy A10 and newer Android versions.
         window.setStatusBarColor(bgColor);
         window.setNavigationBarColor(bgColor);
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         int flags = 0;
         if (!darkMode) {
@@ -461,11 +463,81 @@ public class MainActivity extends Activity {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    // Responsive sizing: uses the real available width/height in dp.
+    // The content is capped on large screens and stays compact on small phones
+    // such as the Samsung Galaxy A10, without relying on a fixed pixel size.
+    private float screenWidthDp() {
+        float density = getResources().getDisplayMetrics().density;
+        return getResources().getDisplayMetrics().widthPixels / density;
+    }
+
+    private float screenHeightDp() {
+        float density = getResources().getDisplayMetrics().density;
+        return getResources().getDisplayMetrics().heightPixels / density;
+    }
+
+    private boolean isCompactScreen() {
+        return screenWidthDp() <= 370f || screenHeightDp() <= 700f;
+    }
+
+    private boolean isVerySmallScreen() {
+        return screenWidthDp() <= 330f || screenHeightDp() <= 600f;
+    }
+
+    private int uiButtonHeight() {
+        if (isVerySmallScreen()) return dp(48);
+        if (isCompactScreen()) return dp(52);
+        return dp(56);
+    }
+
+    private int uiInputHeight() {
+        if (isVerySmallScreen()) return dp(50);
+        if (isCompactScreen()) return dp(53);
+        return dp(55);
+    }
+
+    private int uiSidePadding() {
+        // Keep readable margins on phones and prevent excessively wide controls
+        // on tablets/large displays. Maximum content width is about 620dp.
+        float width = screenWidthDp();
+        float base = isVerySmallScreen() ? 10f : (isCompactScreen() ? 13f : 18f);
+        if (width > 620f) base += (width - 620f) / 2f;
+        return dp((int) Math.round(base));
+    }
+
+    private int uiCardPadding() {
+        if (isVerySmallScreen()) return 11;
+        if (isCompactScreen()) return 14;
+        return 18;
+    }
+
+    private int uiTitleSize() {
+        if (isVerySmallScreen()) return 24;
+        if (isCompactScreen()) return 27;
+        return 29;
+    }
+
+    private int uiBodyTextSize() {
+        return isVerySmallScreen() ? 14 : 15;
+    }
+
+    private int uiQuestionTextSize() {
+        if (isVerySmallScreen()) return 19;
+        if (isCompactScreen()) return 21;
+        return 23;
+    }
+
     private LinearLayout root() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(18), dp(18), dp(18), dp(24));
+        layout.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        int side = uiSidePadding();
+        int top = isVerySmallScreen() ? 7 : (isCompactScreen() ? 10 : 18);
+        int bottom = isVerySmallScreen() ? 12 : (isCompactScreen() ? 16 : 24);
+        layout.setPadding(side, dp(top), side, dp(bottom));
         layout.setBackgroundColor(bgColor);
+        layout.setClipChildren(false);
+        layout.setClipToPadding(false);
         return layout;
     }
 
@@ -473,8 +545,13 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
+        scroll.setClipChildren(false);
         scroll.setPadding(0, 0, 0, dp(8));
-        scroll.addView(child);
+        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        scroll.addView(child, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
         return scroll;
     }
 
@@ -490,10 +567,12 @@ public class MainActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextColor(textColor);
-        tv.setTextSize(29);
+        tv.setTextSize(uiTitleSize());
         tv.setGravity(Gravity.CENTER);
+        tv.setMaxLines(3);
+        tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
         tv.setTypeface(null, Typeface.BOLD);
-        tv.setPadding(0, dp(13), 0, dp(14));
+        tv.setPadding(0, dp(isCompactScreen() ? 8 : 13), 0, dp(isCompactScreen() ? 10 : 14));
         return tv;
     }
 
@@ -501,7 +580,7 @@ public class MainActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextColor(secondaryTextColor);
-        tv.setTextSize(15);
+        tv.setTextSize(uiBodyTextSize());
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(8), dp(4), dp(8), dp(12));
         return tv;
@@ -520,11 +599,14 @@ public class MainActivity extends Activity {
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(16), dp(18), dp(16));
+        int cardPad = uiCardPadding();
+        int cardVerticalPad = isVerySmallScreen() ? 10 : (isCompactScreen() ? 13 : 16);
+        card.setPadding(dp(cardPad), dp(cardVerticalPad),
+                dp(cardPad), dp(cardVerticalPad));
 
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(cardColor);
-        drawable.setCornerRadius(dp(22));
+        drawable.setCornerRadius(dp(isVerySmallScreen() ? 16 : (isCompactScreen() ? 19 : 22)));
         card.setBackground(drawable);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -553,9 +635,10 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(56)
+                uiButtonHeight()
         );
-        params.setMargins(0, dp(6), 0, dp(6));
+        int buttonMargin = isVerySmallScreen() ? 4 : (isCompactScreen() ? 5 : 6);
+        params.setMargins(0, dp(buttonMargin), 0, dp(buttonMargin));
         b.setLayoutParams(params);
         b.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
@@ -573,7 +656,8 @@ public class MainActivity extends Activity {
         e.setTextColor(textColor);
         e.setTextSize(16);
         e.setSingleLine(true);
-        e.setPadding(dp(15), 0, dp(15), 0);
+        e.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        e.setPadding(dp(isVerySmallScreen() ? 12 : 15), 0, dp(isVerySmallScreen() ? 12 : 15), 0);
 
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(darkMode ? Color.rgb(41, 34, 59) : Color.rgb(242, 238, 249));
@@ -582,9 +666,9 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(55)
+                uiInputHeight()
         );
-        params.setMargins(0, dp(6), 0, dp(6));
+        params.setMargins(0, dp(isVerySmallScreen() ? 4 : 6), 0, dp(isVerySmallScreen() ? 4 : 6));
         e.setLayoutParams(params);
         return e;
     }
@@ -626,9 +710,10 @@ public class MainActivity extends Activity {
 
         TextView logo = title("GuessUs");
         logo.setTextColor(Color.WHITE);
-        logo.setTextSize(44);
+        logo.setTextSize(isVerySmallScreen() ? 34 : (isCompactScreen() ? 39 : 44));
+        int logoHeight = isVerySmallScreen() ? 105 : (isCompactScreen() ? 125 : 165);
         root.addView(logo, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(165)
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(logoHeight)
         ));
 
         TextView info = subtitle("توقّع إجابات صاحبك وشوف شكون يعرف شكون أكثر 🎯");
@@ -1116,8 +1201,8 @@ public class MainActivity extends Activity {
             row.setText((host ? "👑 " : "👤 ") + name +
                     (ready ? "   ✓ Ready" : "   • Waiting"));
             row.setTextColor(textColor);
-            row.setTextSize(16);
-            row.setPadding(0, dp(10), 0, dp(10));
+            row.setTextSize(isCompactScreen() ? 15 : 16);
+            row.setPadding(0, dp(isCompactScreen() ? 8 : 10), 0, dp(isCompactScreen() ? 8 : 10));
             card.addView(row);
         }
     }
@@ -1214,10 +1299,11 @@ public class MainActivity extends Activity {
         TextView q = new TextView(this);
         q.setText(questions[questionIndex]);
         q.setTextColor(textColor);
-        q.setTextSize(23);
+        q.setTextSize(uiQuestionTextSize());
         q.setGravity(Gravity.CENTER);
         q.setTypeface(null, Typeface.BOLD);
-        q.setPadding(dp(5), dp(20), dp(5), dp(20));
+        int qPad = isVerySmallScreen() ? 12 : (isCompactScreen() ? 16 : 20);
+        q.setPadding(dp(5), dp(qPad), dp(5), dp(qPad));
         qCard.addView(q);
         root.addView(qCard);
 
@@ -1229,7 +1315,7 @@ public class MainActivity extends Activity {
 
         EditText answer = input("اكتب إجابتك...");
         answer.setSingleLine(false);
-        answer.setMinHeight(dp(110));
+        answer.setMinHeight(dp(isVerySmallScreen() ? 88 : (isCompactScreen() ? 100 : 110)));
         answer.setGravity(Gravity.TOP | Gravity.RIGHT);
         answer.setPadding(dp(15), dp(12), dp(15), dp(12));
         root.addView(answer);
@@ -1443,10 +1529,11 @@ public class MainActivity extends Activity {
         TextView question = new TextView(this);
         question.setText(questions[questionIndex]);
         question.setTextColor(textColor);
-        question.setTextSize(20);
+        question.setTextSize(isVerySmallScreen() ? 18 : (isCompactScreen() ? 19 : 20));
         question.setGravity(Gravity.CENTER);
         question.setTypeface(null, Typeface.BOLD);
-        question.setPadding(dp(5), dp(15), dp(5), dp(15));
+        int predictionQuestionPad = isVerySmallScreen() ? 11 : (isCompactScreen() ? 13 : 15);
+        question.setPadding(dp(5), dp(predictionQuestionPad), dp(5), dp(predictionQuestionPad));
         questionCard.addView(question);
         root.addView(questionCard);
 
@@ -1460,7 +1547,7 @@ public class MainActivity extends Activity {
         root.addView(label("توقّع إجابته:"));
         EditText prediction = input("شنوّة تتوقع جاوب؟");
         prediction.setSingleLine(false);
-        prediction.setMinHeight(dp(90));
+        prediction.setMinHeight(dp(isVerySmallScreen() ? 76 : (isCompactScreen() ? 84 : 90)));
         prediction.setGravity(Gravity.TOP | Gravity.RIGHT);
         prediction.setPadding(dp(15), dp(12), dp(15), dp(12));
         root.addView(prediction);
@@ -2097,7 +2184,7 @@ public class MainActivity extends Activity {
 
         EditText message = input("اكتب رسالة...");
         message.setSingleLine(false);
-        message.setMinHeight(dp(65));
+        message.setMinHeight(dp(isVerySmallScreen() ? 58 : (isCompactScreen() ? 62 : 65)));
         message.setGravity(Gravity.TOP | Gravity.RIGHT);
         message.setPadding(dp(15), dp(10), dp(15), dp(10));
         root.addView(message);
@@ -2216,7 +2303,7 @@ public class MainActivity extends Activity {
         pageTitle.setTextSize(30);
         pageTitle.setTextColor(textColor);
         root.addView(pageTitle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(68)
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(isVerySmallScreen() ? 58 : (isCompactScreen() ? 64 : 68))
         ));
 
         TextView pageSub = subtitle("تحكم في المظهر والموسيقى والمؤثرات");
@@ -2233,7 +2320,7 @@ public class MainActivity extends Activity {
         appearanceTitle.setTextSize(19);
         appearanceTitle.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         appearance.addView(appearanceTitle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(36)
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(isVerySmallScreen() ? 32 : 36)
         ));
 
         TextView appearanceStatus = new TextView(this);
@@ -2258,7 +2345,7 @@ public class MainActivity extends Activity {
         audioTitle.setTextSize(19);
         audioTitle.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         audio.addView(audioTitle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(36)
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(isVerySmallScreen() ? 32 : 36)
         ));
 
         TextView musicStatus = new TextView(this);
@@ -2295,7 +2382,7 @@ public class MainActivity extends Activity {
         aboutTitle.setTextSize(20);
         aboutTitle.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         about.addView(aboutTitle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(38)
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(isVerySmallScreen() ? 34 : 38)
         ));
 
         TextView aboutText = new TextView(this);
